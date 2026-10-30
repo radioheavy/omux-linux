@@ -12,8 +12,7 @@
       working, needs you or is done.
     </p>
     <p>
-      This is the Linux version of omux for macOS by Onur Özcan
-      (https://github.com/onurozcan/omux).
+      This is the Linux version of omux for macOS by Onur Özcan.
     </p>
     <ul>
       <li>Allow or deny tool permissions from the sidebar</li>
@@ -25,6 +24,7 @@
   <launchable type="desktop-id">io.github.radioheavy.omux.desktop</launchable>
   <url type="homepage">https://github.com/radioheavy/omux-linux</url>
   <url type="bugtracker">https://github.com/radioheavy/omux-linux/issues</url>
+  <url type="vcs-browser">https://github.com/radioheavy/omux-linux</url>
   <developer id="io.github.radioheavy">
     <name>radioheavy</name>
   </developer>
