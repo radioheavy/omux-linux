@@ -1,6 +1,12 @@
 # omux for Linux
 
-A native Linux version of omux, built with GTK 4, libadwaita, VTE (the
+The Linux version of [**omux**](https://github.com/onurozcan/omux), the macOS
+terminal for running Claude Code and Codex sessions side by side, made by
+[Onur Özcan](https://github.com/onurozcan). The design, the features and
+the behavior are his; this project brings them to Linux. Use the original
+on a Mac, and this one on Linux.
+
+It is a native app built with GTK 4, libadwaita, VTE (the
 terminal widget behind GNOME Terminal) and WebKitGTK. It does what the macOS
 app does: runs Claude Code and Codex sessions side by side, grouped into
 projects. Each session resumes its own conversation, and the sidebar shows
@@ -8,8 +14,8 @@ whether its agent is working, needs you or is done.
 
 ![omux on Linux: sessions working, waiting on Allow or Deny, and done, with the Changes panel open](docs/screenshot.png)
 
-This is a separate Rust app. It doesn't share code with the Swift app, but
-it uses the same `workspace.json` format, the same settings keys and the
+It is written in Rust and shares no code with the Swift app, but it uses the
+same `workspace.json` format, the same settings keys and the
 same behavior. [docs/PARITY.md](docs/PARITY.md) describes that behavior.
 [docs/ROADMAP.md](docs/ROADMAP.md) lists the decisions that differ on Linux.
 
@@ -34,14 +40,12 @@ On Ubuntu or Debian, install the libraries:
 sudo apt install libgtk-4-1 libadwaita-1-0 libvte-2.91-gtk4-0 libwebkitgtk-6.0-4
 ```
 
-Then install omux. Each CI run of the Linux workflow publishes the
-`omux-linux-x86_64` artifact, which holds a `.deb` and a tarball. Choose
-one:
+Then download the latest [release](https://github.com/radioheavy/omux-linux/releases/latest) and install it. Choose one:
 
 ```sh
-sudo apt install ./omux.deb                 # system-wide
+sudo apt install ./omux_<version>_amd64.deb                          # system-wide
 # or
-tar xzf omux-linux-x86_64.tar.gz && omux-linux-x86_64/install.sh   # ~/.local, no root
+tar xzf omux-linux-x86_64.tar.gz && omux-linux-x86_64/install.sh     # ~/.local, no root
 ```
 
 omux then appears in the app grid. Ways to open a folder in it:
@@ -54,7 +58,6 @@ omux then appears in the app grid. Ways to open a folder in it:
 
 ```sh
 sudo apt install cargo libgtk-4-dev libadwaita-1-dev libvte-2.91-gtk4-dev libwebkitgtk-6.0-dev
-cd linux
 cargo build --release
 ./install.sh            # or run target/release/omux
 ```
@@ -113,8 +116,8 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 OMUX_CODEX_INTEGRATION=1 cargo test -- --ignored   # needs the codex CLI; no model calls
 ```
 
-CI (`.github/workflows/linux.yml`) runs on Ubuntu 24.04 when `linux/`
-changes. Besides fmt, clippy and the tests, it runs these steps:
+CI (`.github/workflows/ci.yml`) runs on Ubuntu 24.04 for every push and
+pull request. Besides fmt, clippy and the tests, it runs these steps:
 
 - the Codex integration test against the real CLI
 - the release build and `.deb`
@@ -131,3 +134,15 @@ Code map:
 | `src/claude.rs`, `codex.rs`, `codex_client/` | Claude Code files and subagents; managed Codex sessions |
 | `src/git.rs`, `pulls.rs` | Git, worktrees, `gh pr view` |
 | `src/ui/` | Window, sidebar, header, dialogs, panels |
+
+## Credits and license
+
+omux was designed and built for macOS by
+[Onur Özcan](https://github.com/onurozcan/omux). This port follows his app's
+behavior (see [docs/PARITY.md](docs/PARITY.md), whose Swift file references
+point into his repository). It reuses his app icon, theme colors and browser
+element picker script.
+
+MIT License. See [LICENSE](LICENSE), which keeps the original omux copyright
+notice.
+

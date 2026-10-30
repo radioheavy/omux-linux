@@ -245,7 +245,7 @@ pub fn install(app: &Rc<App>) {
     add(app, "settings", crate::ui::settings_dialog::present);
     add(app, "welcome", crate::ui::welcome::present);
     add(app, "github", |app| {
-        app.open_uri("https://github.com/onurozcan/omux")
+        app.open_uri("https://github.com/radioheavy/omux-linux")
     });
     add(app, "about", about);
     add(app, "shortcuts", shortcuts);
@@ -311,12 +311,17 @@ fn about(app: &Rc<App>) {
         .application_name("omux")
         .application_icon(crate::APP_ID)
         .version(env!("CARGO_PKG_VERSION"))
-        .comments("A terminal for running many Claude Code and Codex sessions side by side.")
-        .website("https://github.com/onurozcan/omux")
-        .issue_url("https://github.com/onurozcan/omux/issues")
+        .comments("A terminal for running many Claude Code and Codex sessions side by side.\n\nThe Linux version of omux for macOS by Onur Özcan.")
+        .website("https://github.com/radioheavy/omux-linux")
+        .issue_url("https://github.com/radioheavy/omux-linux/issues")
         .license_type(gtk::License::MitX11)
-        .developers(vec!["Onur Özcan", "omux contributors"])
+        .developer_name("radioheavy")
+        .developers(vec!["radioheavy"])
         .build();
+    about.add_acknowledgement_section(
+        Some("Based on"),
+        &["omux for macOS by Onur Özcan https://github.com/onurozcan/omux"],
+    );
     about.present(Some(&app.ui.window));
 }
 

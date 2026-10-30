@@ -5,7 +5,8 @@ edition = "2021"
 rust-version = "1.85"
 description = "Run many Claude Code and Codex sessions side by side"
 license = "MIT"
-repository = "https://github.com/onurozcan/omux"
+repository = "https://github.com/radioheavy/omux-linux"
+homepage = "https://github.com/radioheavy/omux-linux"
 
 [dependencies]
 adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
@@ -26,17 +27,17 @@ webkit6 = { version = "0.6", features = ["v2_42"] }
 
 [package.metadata.deb]
 name = "omux"
-maintainer = "omux contributors"
-copyright = "2026, Onur Özcan"
+maintainer = "radioheavy"
+copyright = "2026 onurozcan (omux), 2026 radioheavy (omux for Linux)"
 section = "devel"
 depends = "libgtk-4-1 (>= 4.14), libadwaita-1-0 (>= 1.5), libvte-2.91-gtk4-0 (>= 0.76), libwebkitgtk-6.0-4, git"
 recommends = "gh, libcanberra-gtk3-module, fonts-inter, fonts-jetbrains-mono"
 extended-description = "Run many Claude Code and Codex sessions side by side, with live agent status, worktrees and pull request status."
 assets = [
     ["target/release/omux", "usr/bin/", "755"],
-    ["data/net.pf1.omux.desktop", "usr/share/applications/", "644"],
-    ["data/net.pf1.omux.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["data/net.pf1.omux.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/io.github.radioheavy.omux.desktop", "usr/share/applications/", "644"],
+    ["data/io.github.radioheavy.omux.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["data/io.github.radioheavy.omux.metainfo.xml", "usr/share/metainfo/", "644"],
 ]
 
 [profile.release]

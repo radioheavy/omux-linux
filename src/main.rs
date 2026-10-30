@@ -24,7 +24,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-pub const APP_ID: &str = "net.pf1.omux";
+pub const APP_ID: &str = "io.github.radioheavy.omux";
 
 fn main() -> glib::ExitCode {
     let gtk_app = adw::Application::builder()

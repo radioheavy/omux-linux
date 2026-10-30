@@ -1,6 +1,6 @@
 # omux Linux port: parity specification
 
-Source of truth: the macOS SwiftUI app in `Sources/omux/` (version 0.5.0, build 5; `Info.plist:27-30`), tests in `Tests/omuxTests/`, `README.md`, `CHANGELOG.md`. Target: a separate Rust + gtk4-rs + libadwaita + VTE (`vte4`) + WebKitGTK 6 app under `linux/`, sharing no code with Swift.
+Source of truth: the macOS SwiftUI app in `Sources/omux/` of [onurozcan/omux](https://github.com/onurozcan/omux) (paths below refer to that repository) (version 0.5.0, build 5; `Info.plist:27-30`), tests in `Tests/omuxTests/`, `README.md`, `CHANGELOG.md`. Target: a separate Rust + gtk4-rs + libadwaita + VTE (`vte4`) + WebKitGTK 6 app under `linux/`, sharing no code with Swift.
 
 Citation format is `File.swift:line` (all files under `Sources/omux/` unless noted). Swift `UserDefaults` keys are given verbatim so the Linux settings file can reuse them. "Mac" = the Swift app, "Linux" = the port.
 

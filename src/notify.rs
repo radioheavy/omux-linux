@@ -91,7 +91,7 @@ pub fn launcher_count(app: &adw::Application, count: usize) {
     let params = (format!("application://{}.desktop", crate::APP_ID), props).to_variant();
     let _ = connection.emit_signal(
         None,
-        "/net/pf1/omux/launcher",
+        "/io/github/radioheavy/omux/launcher",
         "com.canonical.Unity.LauncherEntry",
         "Update",
         Some(&params),

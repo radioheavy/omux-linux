@@ -11,7 +11,7 @@ ICONS="$PREFIX/share/icons/hicolor/scalable/apps"
 META="$PREFIX/share/metainfo"
 
 if [ "${1:-}" = "--uninstall" ]; then
-  rm -f "$BIN" "$APPS/net.pf1.omux.desktop" "$ICONS/net.pf1.omux.svg" "$META/net.pf1.omux.metainfo.xml"
+  rm -f "$BIN" "$APPS/io.github.radioheavy.omux.desktop" "$ICONS/io.github.radioheavy.omux.svg" "$META/io.github.radioheavy.omux.metainfo.xml"
   update-desktop-database "$APPS" 2>/dev/null || true
   echo "omux removed from $PREFIX"
   exit 0
@@ -28,9 +28,9 @@ if [ -n "$missing" ]; then
 fi
 
 install -Dm755 "$SOURCE" "$BIN"
-install -Dm644 data/net.pf1.omux.desktop "$APPS/net.pf1.omux.desktop"
-install -Dm644 data/net.pf1.omux.svg "$ICONS/net.pf1.omux.svg"
-install -Dm644 data/net.pf1.omux.metainfo.xml "$META/net.pf1.omux.metainfo.xml"
+install -Dm644 data/io.github.radioheavy.omux.desktop "$APPS/io.github.radioheavy.omux.desktop"
+install -Dm644 data/io.github.radioheavy.omux.svg "$ICONS/io.github.radioheavy.omux.svg"
+install -Dm644 data/io.github.radioheavy.omux.metainfo.xml "$META/io.github.radioheavy.omux.metainfo.xml"
 update-desktop-database "$APPS" 2>/dev/null || true
 gtk-update-icon-cache -q "$PREFIX/share/icons/hicolor" 2>/dev/null || true
 echo "omux installed to $BIN"
