@@ -15,6 +15,8 @@ use crate::runtime::{StatusColor, TabRuntime};
 
 pub struct Sidebar {
     pub root: gtk::Box,
+    /// All · Local · one tab per SSH host; hidden without remote projects.
+    machines: gtk::Box,
     pub list: gtk::ListBox,
     /// Holds the usage strip (filled by `usage`).
     pub footer: gtk::Box,
@@ -185,6 +187,17 @@ impl Sidebar {
         }
         root.append(&bar);
 
+        let machines = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        machines.add_css_class("linked");
+        machines.add_css_class("omux-machines");
+        machines.set_halign(gtk::Align::Fill);
+        machines.set_homogeneous(true);
+        machines.set_margin_start(10);
+        machines.set_margin_end(10);
+        machines.set_margin_bottom(4);
+        machines.set_visible(false);
+        root.append(&machines);
+
         let list = gtk::ListBox::new();
         list.set_selection_mode(gtk::SelectionMode::Single);
         list.set_activate_on_single_click(true);
@@ -209,6 +222,7 @@ impl Sidebar {
 
         Self {
             root,
+            machines,
             list,
             footer,
             rows: RefCell::new(HashMap::new()),
@@ -380,6 +394,101 @@ pub fn layout(
     items
 }
 
+/// The machine tab in effect: `all` when there are no remote projects or
+/// the chosen host has none left.
+fn machine(app: &App) -> String {
+    let chosen = app.settings.borrow().sidebar_machine.clone();
+    let hosts = crate::remote::hosts(app);
+    if hosts.is_empty() || (chosen != "local" && chosen != "all" && !hosts.contains(&chosen)) {
+        "all".into()
+    } else {
+        chosen
+    }
+}
+
+/// The projects on the chosen machine tab.
+fn visible_groups(app: &App) -> Vec<TabGroup> {
+    let machine = machine(app);
+    app.ws
+        .borrow()
+        .groups
+        .iter()
+        .filter(|g| match machine.as_str() {
+            "all" => true,
+            "local" => g.ssh_host.is_none(),
+            host => g.ssh_host.as_deref() == Some(host),
+        })
+        .cloned()
+        .collect()
+}
+
+/// Rebuilds the machine tabs (All, Local, each host) when hosts change.
+fn fill_machines(app: &Rc<App>) {
+    let sidebar = &app.ui.sidebar;
+    let hosts = crate::remote::hosts(app);
+    sidebar.machines.set_visible(!hosts.is_empty());
+    let mut wanted = vec![("all".to_string(), "All".to_string())];
+    wanted.push(("local".into(), "Local".into()));
+    wanted.extend(hosts.iter().map(|h| (h.clone(), format!("☁ {h}"))));
+    let current = machine(app);
+    // Reuse the buttons when the hosts are the same; just sync the state.
+    let mut existing = Vec::new();
+    let mut child = sidebar.machines.first_child();
+    while let Some(widget) = child {
+        existing.push(widget.widget_name().to_string());
+        child = widget.next_sibling();
+    }
+    let keys: Vec<String> = wanted.iter().map(|(k, _)| k.clone()).collect();
+    if existing != keys {
+        while let Some(widget) = sidebar.machines.first_child() {
+            sidebar.machines.remove(&widget);
+        }
+        let mut first: Option<gtk::ToggleButton> = None;
+        for (key, label) in &wanted {
+            let button = gtk::ToggleButton::with_label(label);
+            button.set_widget_name(key);
+            button.add_css_class("omux-small");
+            if let Some(first) = &first {
+                button.set_group(Some(first));
+            } else {
+                first = Some(button.clone());
+            }
+            button.set_active(*key == current);
+            let weak = Rc::downgrade(app);
+            let key = key.clone();
+            button.connect_toggled(move |button| {
+                let Some(app) = weak.upgrade() else { return };
+                if !button.is_active() || app.settings.borrow().sidebar_machine == key {
+                    return;
+                }
+                app.update_settings(|s| s.sidebar_machine = key.clone());
+                if key != "all" && key != "local" {
+                    crate::remote::import(&app, &key, false);
+                }
+                // Not from inside the button's own signal: rebuilding may
+                // replace it.
+                let weak = Rc::downgrade(&app);
+                glib::idle_add_local_once(move || {
+                    if let Some(app) = weak.upgrade() {
+                        app.refresh_sidebar();
+                    }
+                });
+            });
+            sidebar.machines.append(&button);
+        }
+    } else {
+        let mut child = sidebar.machines.first_child();
+        while let Some(widget) = child {
+            if let Ok(button) = widget.clone().downcast::<gtk::ToggleButton>() {
+                if button.widget_name() == current.as_str() && !button.is_active() {
+                    button.set_active(true);
+                }
+            }
+            child = widget.next_sibling();
+        }
+    }
+}
+
 fn current_layout(app: &App) -> Vec<Item> {
     let (recent, by_activity) = {
         let settings = app.settings.borrow();
@@ -393,7 +502,7 @@ fn current_layout(app: &App) -> Vec<Item> {
     } else {
         HashMap::new()
     };
-    layout(&app.ws.borrow().groups, &times, recent, by_activity)
+    layout(&visible_groups(app), &times, recent, by_activity)
 }
 
 /// Sessions in the order the sidebar shows them, collapsed ones included,
@@ -406,7 +515,7 @@ pub fn tab_order(app: &App) -> Vec<Uuid> {
     } else {
         HashMap::new()
     };
-    let mut groups = app.ws.borrow().groups.clone();
+    let mut groups = visible_groups(app);
     for group in &mut groups {
         group.is_collapsed = false;
     }
@@ -420,6 +529,7 @@ pub fn tab_order(app: &App) -> Vec<Uuid> {
 }
 
 pub fn rebuild(app: &Rc<App>) {
+    fill_machines(app);
     let sidebar = &app.ui.sidebar;
     sidebar.syncing.set(true);
     sidebar.list.remove_all();
@@ -499,18 +609,15 @@ fn group_row(app: &Rc<App>, group: &TabGroup) -> gtk::ListBoxRow {
             entry.grab_focus();
         });
     } else {
-        if let Some(host) = &group.ssh_host {
-            let icon = gtk::Image::from_icon_name("network-server-symbolic");
-            icon.set_opacity(0.6);
-            icon.set_tooltip_text(Some(&format!("Runs on {host}")));
-            hbox.append(&icon);
-        }
         let name = gtk::Label::new(Some(&group.name));
         name.add_css_class("omux-project");
         name.set_xalign(0.0);
         name.set_hexpand(true);
         name.set_ellipsize(gtk::pango::EllipsizeMode::End);
         hbox.append(&name);
+        if let Some(host) = &group.ssh_host {
+            hbox.append(&host_pill(host));
+        }
     }
 
     let add = gtk::Button::from_icon_name("list-add-symbolic");
@@ -531,6 +638,15 @@ fn group_row(app: &Rc<App>, group: &TabGroup) -> gtk::ListBoxRow {
     row.set_child(Some(&hbox));
     drag_source(&row, format!("group:{}", group.id));
     row
+}
+
+/// A small "☁ host" sticker for remote projects and sessions.
+fn host_pill(host: &str) -> gtk::Label {
+    let pill = gtk::Label::new(Some(&format!("☁ {host}")));
+    pill.add_css_class("omux-pill");
+    pill.set_valign(gtk::Align::Center);
+    pill.set_tooltip_text(Some(&format!("Runs on {host}")));
+    pill
 }
 
 fn session_row(app: &Rc<App>, tab: &TabItem) -> SessionRow {
@@ -611,6 +727,12 @@ fn session_row(app: &Rc<App>, tab: &TabItem) -> SessionRow {
     });
     trailing.add_named(&start_stop, Some("button"));
     trailing.set_hhomogeneous(false);
+    // Without project headers, a remote session shows its host.
+    if app.settings.borrow().sidebar_view == "recent" && machine(app) == "all" {
+        if let Some(host) = app.tab(tab.id).and_then(|(g, _)| g.ssh_host) {
+            line.append(&host_pill(&host));
+        }
+    }
     line.append(&trailing);
     outer.append(&line);
 
@@ -995,6 +1117,21 @@ fn group_menu(app: &Rc<App>, group_id: Uuid) -> gio::Menu {
         &target,
     );
     item(&new, "New Shell", "app.group-new-shell", &target);
+    if let Some(host) = app
+        .ws
+        .borrow()
+        .groups
+        .iter()
+        .find(|g| g.id == group_id)
+        .and_then(|g| g.ssh_host.clone())
+    {
+        item(
+            &new,
+            &format!("Import Conversations from {host}"),
+            "app.import-remote",
+            &host,
+        );
+    }
     menu.append_section(None, &new);
     let edit = gio::Menu::new();
     item(&edit, "Rename", "app.group-rename", &target);

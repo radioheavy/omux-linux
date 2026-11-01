@@ -43,6 +43,7 @@ fn normalize(dir: &str) -> String {
 pub fn plan(
     ws: &Workspace,
     mut sessions: Vec<RecentSession>,
+    host: Option<&str>,
     folder_exists: impl Fn(&str) -> bool,
 ) -> Vec<PlannedGroup> {
     sessions.sort_by_key(|s| std::cmp::Reverse(s.date));
@@ -65,6 +66,7 @@ pub fn plan(
         let existing = ws
             .groups
             .iter()
+            .filter(|g| g.ssh_host.as_deref() == host)
             .find(|g| g.directory.as_deref().map(normalize).as_deref() == Some(directory.as_str()))
             .map(|g| g.id);
         groups.push(PlannedGroup {
@@ -87,7 +89,11 @@ fn tab_for(session: &RecentSession) -> TabItem {
 /// Adds the planned sessions to the workspace. New projects start
 /// collapsed so a long history doesn't flood the sidebar. Returns the
 /// number of sessions and of new projects.
-pub fn apply(ws: &mut Workspace, planned: Vec<PlannedGroup>) -> (Vec<Uuid>, usize) {
+pub fn apply(
+    ws: &mut Workspace,
+    planned: Vec<PlannedGroup>,
+    host: Option<&str>,
+) -> (Vec<Uuid>, usize) {
     let mut ids = Vec::new();
     let mut made = 0;
     for planned_group in planned {
@@ -105,6 +111,7 @@ pub fn apply(ws: &mut Workspace, planned: Vec<PlannedGroup>) -> (Vec<Uuid>, usiz
                     .unwrap_or_else(|| planned_group.directory.clone());
                 let mut group = TabGroup::new(name, Some(planned_group.directory), tabs);
                 group.is_collapsed = true;
+                group.ssh_host = host.map(str::to_string);
                 ws.groups.push(group);
                 made += 1;
             }
@@ -116,10 +123,19 @@ pub fn apply(ws: &mut Workspace, planned: Vec<PlannedGroup>) -> (Vec<Uuid>, usiz
 /// Imports every Claude Code conversation that has no session yet.
 /// Returns the number of sessions and of new projects.
 pub fn run(app: &Rc<App>) -> (usize, usize) {
-    let planned = plan(&app.ws.borrow(), crate::claude::all_sessions(), |dir| {
-        expand_tilde(dir).is_dir()
-    });
-    let (ids, made) = apply(&mut app.ws.borrow_mut(), planned);
+    let planned = plan(
+        &app.ws.borrow(),
+        crate::claude::all_sessions(),
+        None,
+        |dir| expand_tilde(dir).is_dir(),
+    );
+    add(app, planned, None)
+}
+
+/// Adds planned sessions (from this computer, or from `host`) to the
+/// workspace, not started. Returns the number of sessions and new projects.
+pub fn add(app: &Rc<App>, planned: Vec<PlannedGroup>, host: Option<&str>) -> (usize, usize) {
+    let (ids, made) = apply(&mut app.ws.borrow_mut(), planned, host);
     if ids.is_empty() {
         return (0, 0);
     }
@@ -189,6 +205,7 @@ mod tests {
                 session(3, "/a/", 5),
                 session(4, "/gone", 1),
             ],
+            None,
             |dir| !dir.starts_with("/gone"),
         );
         let summary: Vec<(String, Vec<u128>)> = planned
@@ -225,6 +242,7 @@ mod tests {
                 session(2, "/a", 2),
                 session(3, "/c", 1),
             ],
+            None,
             |_| true,
         );
         // Newest first: /c, then the existing /a project.
@@ -233,7 +251,7 @@ mod tests {
         assert_eq!(planned[1].existing, Some(group_id));
         assert_eq!(planned[1].sessions.len(), 1);
 
-        let (ids, made) = apply(&mut ws, planned);
+        let (ids, made) = apply(&mut ws, planned, None);
         assert_eq!((ids.len(), made), (2, 1));
         assert_eq!(ws.groups[0].tabs.len(), 2);
         let added = &ws.groups[0].tabs[1];
@@ -246,11 +264,12 @@ mod tests {
         assert!(new_group.is_collapsed);
 
         // Running it again adds nothing.
-        assert!(
-            plan(&ws, vec![session(2, "/a", 2), session(3, "/c", 1)], |_| {
-                true
-            })
-            .is_empty()
-        );
+        assert!(plan(
+            &ws,
+            vec![session(2, "/a", 2), session(3, "/c", 1)],
+            None,
+            |_| true
+        )
+        .is_empty());
     }
 }

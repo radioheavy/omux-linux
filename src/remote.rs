@@ -12,6 +12,7 @@ use adw::prelude::*;
 use uuid::Uuid;
 
 use crate::app::App;
+use crate::claude::RecentSession;
 use crate::model::{TabGroup, TabItem};
 use crate::runtime::TabRuntime;
 
@@ -161,9 +162,184 @@ fn add_project(app: &Rc<App>, host: &str, dir: &str, name: &str) {
     app.select(id);
 }
 
+/// Lists the host's Claude Code conversations as JSON: id, folder, first
+/// prompt, title and last write. Runs with the host's python3.
+const LIST_SCRIPT: &str = r#"
+import glob, json, os
+out = []
+for p in glob.glob(os.path.expanduser('~/.claude/projects/*/*.jsonl')):
+    cwd = prompt = title = custom = None
+    try:
+        with open(p, errors='ignore') as f:
+            for line in f:
+                if prompt is None and '"type":"user"' in line:
+                    try:
+                        o = json.loads(line)
+                    except Exception:
+                        continue
+                    if o.get('isSidechain'):
+                        continue
+                    cwd = cwd or o.get('cwd')
+                    c = (o.get('message') or {}).get('content')
+                    texts = [c] if isinstance(c, str) else [i.get('text', '') for i in (c or []) if isinstance(i, dict) and i.get('type') == 'text']
+                    for t in texts:
+                        t = ' '.join(t.split())
+                        if t and not t.startswith('<'):
+                            prompt = t[:300]
+                            break
+                if '"ai-title"' in line or '"custom-title"' in line:
+                    try:
+                        o = json.loads(line)
+                    except Exception:
+                        continue
+                    if o.get('type') == 'ai-title' and o.get('aiTitle'):
+                        title = o['aiTitle']
+                    if o.get('type') == 'custom-title' and o.get('customTitle'):
+                        custom = o['customTitle']
+    except OSError:
+        continue
+    if cwd and prompt:
+        out.append({'id': os.path.basename(p)[:-6], 'cwd': cwd, 'prompt': prompt,
+                    'title': custom or title or '', 'date': int(os.path.getmtime(p))})
+print(json.dumps(out))
+"#;
+
+#[derive(serde::Deserialize)]
+struct Listed {
+    id: String,
+    cwd: String,
+    prompt: String,
+    #[serde(default)]
+    title: String,
+    date: u64,
+}
+
+/// The host's conversations, named by their title when they have one.
+/// Blocking: runs `ssh host python3 -`.
+fn list(host: &str) -> Result<Vec<RecentSession>, String> {
+    use std::io::Write;
+    let mut child = std::process::Command::new("ssh")
+        .args([
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=15",
+            host,
+            "python3",
+            "-",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("couldn't run ssh: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(LIST_SCRIPT.as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ssh {host}: {}", err.trim()));
+    }
+    parse_list(&output.stdout)
+}
+
+fn parse_list(json: &[u8]) -> Result<Vec<RecentSession>, String> {
+    let listed: Vec<Listed> = serde_json::from_slice(json).map_err(|e| e.to_string())?;
+    Ok(listed
+        .into_iter()
+        .filter_map(|l| {
+            Some(RecentSession {
+                id: Uuid::parse_str(&l.id).ok()?,
+                cwd: l.cwd,
+                prompt: if l.title.is_empty() {
+                    l.prompt
+                } else {
+                    l.title
+                },
+                date: std::time::UNIX_EPOCH + std::time::Duration::from_secs(l.date),
+            })
+        })
+        .collect())
+}
+
+thread_local! {
+    static IMPORTING: std::cell::RefCell<std::collections::HashSet<String>> =
+        Default::default();
+}
+
+/// Adds the host's Claude Code conversations that have no session yet, as
+/// remote sessions in projects per folder. With `report`, says what it did.
+pub fn import(app: &Rc<App>, host: &str, report: bool) {
+    let busy = IMPORTING.with(|set| !set.borrow_mut().insert(host.to_string()));
+    if busy {
+        return;
+    }
+    let (tx, rx) = async_channel::bounded(1);
+    let h = host.to_string();
+    std::thread::spawn(move || {
+        let _ = tx.send_blocking(list(&h));
+    });
+    let weak = Rc::downgrade(app);
+    let host = host.to_string();
+    gtk::glib::spawn_future_local(async move {
+        let result = rx.recv().await;
+        IMPORTING.with(|set| set.borrow_mut().remove(&host));
+        let (Some(app), Ok(result)) = (weak.upgrade(), result) else {
+            return;
+        };
+        match result {
+            Ok(sessions) => {
+                let planned =
+                    crate::import::plan(&app.ws.borrow(), sessions, Some(&host), |_| true);
+                let (added, _) = crate::import::add(&app, planned, Some(&host));
+                if report {
+                    let body = match added {
+                        0 => format!("Every conversation on {host} already has a session."),
+                        1 => format!("Added 1 conversation from {host}."),
+                        n => format!("Added {n} conversations from {host}."),
+                    };
+                    crate::ui::dialogs::info(&app, "Conversations on the Server", &body);
+                }
+            }
+            Err(err) if report => {
+                crate::ui::dialogs::info(&app, "Couldn't reach the server", &err);
+            }
+            Err(_) => {}
+        }
+    });
+}
+
+/// The SSH hosts of remote projects, in sidebar order, without repeats.
+pub fn hosts(app: &App) -> Vec<String> {
+    let mut hosts: Vec<String> = Vec::new();
+    for group in &app.ws.borrow().groups {
+        if let Some(host) = &group.ssh_host {
+            if !hosts.contains(host) {
+                hosts.push(host.clone());
+            }
+        }
+    }
+    hosts
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listing() {
+        let json = br#"[{"id":"00000000-0000-0000-0000-000000000005","cwd":"/home/u/a","prompt":"hi there","title":"Expo plan","date":10},
+            {"id":"bad","cwd":"/x","prompt":"p","date":1},
+            {"id":"00000000-0000-0000-0000-000000000006","cwd":"/home/u/b","prompt":"first words","title":"","date":20}]"#;
+        let sessions = parse_list(json).unwrap();
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(sessions[0].prompt, "Expo plan");
+        assert_eq!(sessions[1].prompt, "first words");
+        assert_eq!(sessions[1].cwd, "/home/u/b");
+    }
 
     #[test]
     fn folders() {

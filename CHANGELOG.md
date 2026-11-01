@@ -1,5 +1,10 @@
 # Changelog (Linux)
 
+## 0.10.0
+
+- **Machine tabs.** With a remote project, tabs at the top of the sidebar switch between All, Local and each SSH host. All lists both, and remote projects carry a "☁ host" sticker (on each row in the latest-first list).
+- **Conversations on the server.** Opening a host's tab adds the Claude Code conversations on that host that have no session yet, in projects per folder, named by their titles. They start when selected and continue there. A remote project's menu has Import Conversations from <host> too.
+
 ## 0.9.0
 
 - **Remote projects.** Main menu › New Remote Project… runs a project's sessions on another machine over SSH, such as a cloud server. Each session runs inside `dtach` on the host, so it keeps working when omux or your computer is off. Selecting it again reattaches to the same screen. Claude Code's status (working, needs you, done) still shows in the sidebar.

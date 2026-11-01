@@ -277,6 +277,9 @@ pub fn install(app: &Rc<App>) {
     add(app, "welcome", crate::ui::welcome::present);
     add(app, "import-claude", crate::import::run_and_report);
     add(app, "new-remote-project", crate::remote::new_project);
+    add_str(app, "import-remote", |app, host| {
+        crate::remote::import(app, host, true)
+    });
     add(app, "github", |app| {
         app.open_uri("https://github.com/radioheavy/omux-linux")
     });

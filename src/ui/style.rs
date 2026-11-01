@@ -69,6 +69,8 @@ windowcontrols button {{ min-height: 22px; min-width: 22px; padding: 0; margin: 
 .omux-project {{ font-size: 11px; font-weight: 500; opacity: 0.5; }}
 .omux-session-name {{ font-size: 13px; font-weight: 500; }}
 .omux-status {{ font-size: 11px; opacity: 0.58; }}
+.omux-pill {{ font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: alpha(currentColor, 0.10); opacity: 0.8; }}
+.omux-machines button {{ min-height: 22px; font-size: 0.85em; }}
 .omux-stopped {{ opacity: 0.55; }}
 .omux-header-name {{ font-weight: 600; font-size: 12px; }}
 .omux-provider {{ font-size: 11px; opacity: 0.42; }}
