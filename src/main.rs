@@ -11,6 +11,7 @@ mod notify;
 mod persistence;
 mod pulls;
 mod runtime;
+mod search;
 mod session_env;
 mod settings;
 mod swift_json;

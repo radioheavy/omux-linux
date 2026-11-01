@@ -104,6 +104,7 @@ impl App {
         }
         // After the auto-resume pass, so imported sessions wait to be selected.
         crate::import::first_launch(&app);
+        crate::search::warm_up();
         app.refresh_all();
 
         let welcomed = app.settings.borrow().welcomed;

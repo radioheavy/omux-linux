@@ -4,6 +4,7 @@
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use adw::prelude::*;
@@ -13,6 +14,7 @@ use uuid::Uuid;
 use crate::app::App;
 use crate::model::{SessionProvider, TabGroup, TabItem};
 use crate::persistence::abbreviate_home;
+use crate::search::{Entry, Index};
 
 #[derive(Clone)]
 pub struct Conversation {
@@ -69,17 +71,40 @@ struct Sheet {
     status: adw::StatusPage,
     items: RefCell<Vec<Conversation>>,
     error: RefCell<Option<String>>,
+    /// The rows on screen, by row name.
+    shown: RefCell<Vec<Conversation>>,
+    /// Claude Code conversation text, once read (`search::current`).
+    index: RefCell<Option<Arc<Index>>>,
+    /// Ask Claude's answer, for the query it was asked.
+    answer: RefCell<Option<(String, Vec<usize>)>>,
+    ask: gtk::Button,
+    loading_label: gtk::Label,
+}
+
+fn conversation(entry: &Entry) -> Conversation {
+    Conversation {
+        provider: SessionProvider::Claude,
+        id: entry.id.to_string().to_lowercase(),
+        cwd: entry.cwd.clone(),
+        prompt: entry.prompt.clone(),
+        date: entry.date,
+    }
 }
 
 pub fn present(app: &Rc<App>) {
     let dialog = adw::Dialog::new();
-    dialog.set_title("Recent Conversations");
+    dialog.set_title("Conversations");
     dialog.set_content_width(560);
     dialog.set_content_height(440);
 
     let search = gtk::SearchEntry::new();
-    search.set_placeholder_text(Some("Search recent conversations…"));
+    search.set_placeholder_text(Some("Search inside conversations…"));
     search.set_hexpand(true);
+    let ask = gtk::Button::with_label("Ask Claude");
+    ask.set_tooltip_text(Some(
+        "Find conversations by meaning: Claude Haiku reads a short digest of each one",
+    ));
+    ask.set_sensitive(false);
     let segmented = |a: &str, b: &str| {
         let first = gtk::ToggleButton::with_label(a);
         let second = gtk::ToggleButton::with_label(b);
@@ -121,18 +146,24 @@ pub fn present(app: &Rc<App>) {
     let spinner = gtk::Spinner::new();
     spinner.start();
     spinner.set_size_request(32, 32);
-    spinner.set_halign(gtk::Align::Center);
-    spinner.set_valign(gtk::Align::Center);
+    let loading_label = gtk::Label::new(None);
+    loading_label.add_css_class("dim-label");
+    let loading = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    loading.set_halign(gtk::Align::Center);
+    loading.set_valign(gtk::Align::Center);
+    loading.append(&spinner);
+    loading.append(&loading_label);
     let stack = gtk::Stack::new();
     stack.add_named(&scroller, Some("list"));
     stack.add_named(&status, Some("status"));
-    stack.add_named(&spinner, Some("loading"));
+    stack.add_named(&loading, Some("loading"));
 
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 8);
-    let top = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    let top = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     top.set_margin_start(12);
     top.set_margin_end(12);
     top.append(&search);
+    top.append(&ask);
     vbox.append(&top);
     vbox.append(&controls);
     vbox.append(&stack);
@@ -150,7 +181,30 @@ pub fn present(app: &Rc<App>) {
         status,
         items: RefCell::new(Vec::new()),
         error: RefCell::new(None),
+        shown: RefCell::new(Vec::new()),
+        index: RefCell::new(None),
+        answer: RefCell::new(None),
+        ask,
+        loading_label,
     });
+
+    // Conversation text for searching inside them; the first read can take
+    // a while, the list works meanwhile.
+    {
+        let (tx, rx) = async_channel::bounded(1);
+        std::thread::spawn(move || {
+            let _ = tx.send_blocking(crate::search::current());
+        });
+        let sheet = sheet.clone();
+        let weak = Rc::downgrade(app);
+        glib::spawn_future_local(async move {
+            let Ok(index) = rx.recv().await else { return };
+            *sheet.index.borrow_mut() = Some(index);
+            if let Some(app) = weak.upgrade() {
+                fill(&app, &sheet);
+            }
+        });
+    }
 
     // A slow load (Codex may start a server) must not replace a newer one.
     let generation = Rc::new(std::cell::Cell::new(0u64));
@@ -166,6 +220,7 @@ pub fn present(app: &Rc<App>) {
             } else {
                 SessionProvider::Claude
             };
+            sheet.loading_label.set_text("");
             sheet.stack.set_visible_child_name("loading");
             let (tx, rx) = async_channel::bounded(1);
             std::thread::spawn(move || {
@@ -212,6 +267,13 @@ pub fn present(app: &Rc<App>) {
         }
     });
 
+    let weak = Rc::downgrade(app);
+    let s = sheet.clone();
+    sheet.ask.connect_clicked(move |_| {
+        let Some(app) = weak.upgrade() else { return };
+        ask_claude(&app, &s);
+    });
+
     let open_row = {
         let weak = Rc::downgrade(app);
         let sheet = sheet.clone();
@@ -221,7 +283,7 @@ pub fn present(app: &Rc<App>) {
             let Ok(index) = row.widget_name().parse::<usize>() else {
                 return;
             };
-            let Some(item) = sheet.items.borrow().get(index).cloned() else {
+            let Some(item) = sheet.shown.borrow().get(index).cloned() else {
                 return;
             };
             if let Some(d) = d.upgrade() {
@@ -249,27 +311,116 @@ pub fn present(app: &Rc<App>) {
     sheet.search.grab_focus();
 }
 
-fn fill(app: &Rc<App>, sheet: &Rc<Sheet>) {
-    sheet.list.remove_all();
-    let provider_name = if sheet.codex.is_active() {
-        "Codex"
-    } else {
-        "Claude Code"
-    };
-    if let Some(error) = sheet.error.borrow().as_ref() {
-        sheet
-            .status
-            .set_title(&format!("No {provider_name} conversations"));
-        sheet.status.set_description(Some(error));
-        sheet.stack.set_visible_child_name("status");
+/// Asks Claude which conversations match the search text, then shows them.
+fn ask_claude(app: &Rc<App>, sheet: &Rc<Sheet>) {
+    let question = sheet.search.text().trim().to_string();
+    if question.is_empty() {
         return;
     }
-    let query = sheet.search.text().to_lowercase();
+    sheet.loading_label.set_text("Asking Claude…");
+    sheet.stack.set_visible_child_name("loading");
+    sheet.ask.set_sensitive(false);
+    let (tx, rx) = async_channel::bounded(1);
+    let q = question.clone();
+    std::thread::spawn(move || {
+        let index = crate::search::current();
+        let result = index.ask(&q);
+        let _ = tx.send_blocking((index, result));
+    });
+    let sheet = sheet.clone();
+    let weak = Rc::downgrade(app);
+    glib::spawn_future_local(async move {
+        let Ok((index, result)) = rx.recv().await else {
+            return;
+        };
+        let Some(app) = weak.upgrade() else { return };
+        *sheet.index.borrow_mut() = Some(index);
+        match result {
+            Ok(found) => *sheet.answer.borrow_mut() = Some((question, found)),
+            Err(err) => {
+                sheet.answer.borrow_mut().take();
+                fill(&app, &sheet);
+                sheet.status.set_title("Couldn't ask Claude");
+                sheet.status.set_description(Some(&err));
+                sheet.stack.set_visible_child_name("status");
+                return;
+            }
+        }
+        fill(&app, &sheet);
+    });
+}
+
+fn show_status(sheet: &Sheet, title: &str, description: Option<&str>) {
+    sheet.status.set_title(title);
+    sheet.status.set_description(description);
+    sheet.stack.set_visible_child_name("status");
+}
+
+fn fill(app: &Rc<App>, sheet: &Rc<Sheet>) {
+    sheet.list.remove_all();
+    sheet.shown.borrow_mut().clear();
+    let codex = sheet.codex.is_active();
+    let provider_name = if codex { "Codex" } else { "Claude Code" };
+    let query_text = sheet.search.text().trim().to_string();
+    sheet.ask.set_visible(!codex);
+    sheet.ask.set_sensitive(!query_text.is_empty());
+    if let Some(error) = sheet.error.borrow().as_ref() {
+        show_status(
+            sheet,
+            &format!("No {provider_name} conversations"),
+            Some(error),
+        );
+        return;
+    }
+    let open_ids = open_ids(app);
+
+    // Claude Code with a query: search inside the conversations, or show
+    // Claude's answer for this query.
+    let index = sheet.index.borrow().clone();
+    if let (false, false, Some(index)) = (codex, query_text.is_empty(), index) {
+        let answer = sheet
+            .answer
+            .borrow()
+            .as_ref()
+            .filter(|(q, _)| *q == query_text)
+            .map(|(_, found)| found.clone());
+        let rows: Vec<(Conversation, String)> = match &answer {
+            Some(found) => found
+                .iter()
+                .filter_map(|i| index.entries.get(*i))
+                .map(|e| (conversation(e), "Picked by Claude".to_string()))
+                .collect(),
+            None => index
+                .search(&query_text, 100)
+                .into_iter()
+                .map(|hit| (conversation(&index.entries[hit.entry]), hit.snippet))
+                .collect(),
+        };
+        if rows.is_empty() {
+            let hint = if answer.is_some() {
+                "Claude found no conversation about this."
+            } else {
+                "No conversation has all of these words. Ask Claude finds them by meaning."
+            };
+            show_status(sheet, "No matches", Some(hint));
+            return;
+        }
+        for (index, (c, detail)) in rows.into_iter().enumerate() {
+            let is_open = open_ids.contains(&c.id);
+            sheet
+                .list
+                .append(&row_for(index, &c, is_open, true, Some(&detail)));
+            sheet.shown.borrow_mut().push(c);
+        }
+        sheet.stack.set_visible_child_name("list");
+        return;
+    }
+
+    let query = query_text.to_lowercase();
     let items = sheet.items.borrow();
-    let mut matches: Vec<(usize, &Conversation)> = items
+    let mut matches: Vec<&Conversation> = items
         .iter()
-        .enumerate()
-        .filter(|(_, c)| {
+        .filter(|c| {
             query.is_empty()
                 || c.prompt.to_lowercase().contains(&query)
                 || abbreviate_home(Path::new(&c.cwd))
@@ -283,56 +434,63 @@ fn fill(app: &Rc<App>, sheet: &Rc<Sheet>) {
         } else {
             "No matches".to_string()
         };
-        sheet.status.set_title(&title);
-        sheet.status.set_description(None);
-        sheet.stack.set_visible_child_name("status");
+        show_status(sheet, &title, None);
         return;
     }
-    let open_ids = open_ids(app);
-    if sheet.by_folder.is_active() {
+    let by_folder = sheet.by_folder.is_active();
+    if by_folder {
         // Folders ordered by their most recent conversation.
         let mut folders: Vec<String> = Vec::new();
-        for (_, c) in &matches {
+        for c in &matches {
             if !folders.contains(&c.cwd) {
                 folders.push(c.cwd.clone());
             }
         }
-        matches.sort_by_key(|(_, c)| folders.iter().position(|f| *f == c.cwd));
-        let mut last: Option<String> = None;
-        for (index, c) in matches {
-            if last.as_deref() != Some(c.cwd.as_str()) {
-                let header = gtk::Label::new(Some(&abbreviate_home(Path::new(&c.cwd))));
-                header.add_css_class("omux-project");
-                header.set_xalign(0.0);
-                header.set_margin_top(8);
-                let row = gtk::ListBoxRow::new();
-                row.set_child(Some(&header));
-                row.set_activatable(false);
-                row.set_selectable(false);
-                sheet.list.append(&row);
-                last = Some(c.cwd.clone());
-            }
-            sheet
-                .list
-                .append(&row_for(index, c, open_ids.contains(&c.id), false));
+        matches.sort_by_key(|c| folders.iter().position(|f| *f == c.cwd));
+    }
+    let mut last: Option<String> = None;
+    for (index, c) in matches.into_iter().enumerate() {
+        if by_folder && last.as_deref() != Some(c.cwd.as_str()) {
+            let header = gtk::Label::new(Some(&abbreviate_home(Path::new(&c.cwd))));
+            header.add_css_class("omux-project");
+            header.set_xalign(0.0);
+            header.set_margin_top(8);
+            let row = gtk::ListBoxRow::new();
+            row.set_child(Some(&header));
+            row.set_activatable(false);
+            row.set_selectable(false);
+            sheet.list.append(&row);
+            last = Some(c.cwd.clone());
         }
-    } else {
-        for (index, c) in matches {
-            sheet
-                .list
-                .append(&row_for(index, c, open_ids.contains(&c.id), true));
-        }
+        sheet.list.append(&row_for(
+            index,
+            c,
+            open_ids.contains(&c.id),
+            !by_folder,
+            None,
+        ));
+        sheet.shown.borrow_mut().push(c.clone());
     }
     sheet.stack.set_visible_child_name("list");
 }
 
-fn row_for(index: usize, c: &Conversation, is_open: bool, show_folder: bool) -> gtk::ListBoxRow {
+fn row_for(
+    index: usize,
+    c: &Conversation,
+    is_open: bool,
+    show_folder: bool,
+    detail: Option<&str>,
+) -> gtk::ListBoxRow {
     let row = adw::ActionRow::new();
     row.set_title(&glib::markup_escape_text(&c.prompt));
     row.set_title_lines(1);
     let mut subtitle = relative(c.date);
     if show_folder {
         subtitle = format!("{} · {subtitle}", abbreviate_home(Path::new(&c.cwd)));
+    }
+    if let Some(detail) = detail.filter(|d| !d.is_empty()) {
+        subtitle = format!("{subtitle}\n{detail}");
+        row.set_subtitle_lines(2);
     }
     row.set_subtitle(&glib::markup_escape_text(&subtitle));
     if is_open {

@@ -1,5 +1,11 @@
 # Changelog (Linux)
 
+## 0.5.0
+
+- **Search inside conversations.** The Conversations sheet (Ctrl+Alt+O, or the clock button) searches the whole text of every Claude Code conversation, not only its first prompt. Case and accents don't matter, so `kopek` finds `köpek`. Each result shows the text around the match.
+  - omux keeps the text in `~/.cache/omux/conversations.json` and reads only what was added since the last search. The first read happens in the background shortly after launch.
+- **Ask Claude.** Type a question such as "the conversation where we ported omux to Linux" and press Ask Claude. Claude Haiku reads a short digest of each conversation (folder, age and your messages) and picks the matching ones by meaning. It runs `claude -p` with no tools and saves no session.
+
 ## 0.4.0
 
 - **Show and order sessions.** A new button at the top of the sidebar:

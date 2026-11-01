@@ -118,6 +118,7 @@ impl Sidebar {
         view.append(Some("Previous Session"), Some("app.prev-session"));
         section.append_submenu(Some("View"), &view);
         section.append(Some("Jump to Session…"), Some("app.quick-switch"));
+        section.append(Some("Search Conversations…"), Some("app.open-recent"));
         section.append(
             Some("Import Claude Code Conversations"),
             Some("app.import-claude"),
@@ -163,7 +164,7 @@ impl Sidebar {
             (
                 "document-open-recent-symbolic",
                 "app.open-recent",
-                "Open recent conversation (Ctrl+Alt+O)",
+                "Search conversations (Ctrl+Alt+O)",
             ),
             (
                 "folder-new-symbolic",
