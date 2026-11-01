@@ -37,6 +37,11 @@ pub struct Settings {
     /// Claude Code runs with `--dangerously-skip-permissions`, Codex with no
     /// approvals and no sandbox (Linux only).
     pub skip_permissions: bool,
+    /// `projects` (sessions under their project) or `recent` (every
+    /// session in one list, latest activity first). Linux only.
+    pub sidebar_view: String,
+    /// `manual` or `recent` (latest activity first). Linux only.
+    pub project_order: String,
 }
 
 impl Default for Settings {
@@ -62,6 +67,8 @@ impl Default for Settings {
             welcomed: false,
             imported_claude_conversations: false,
             skip_permissions: false,
+            sidebar_view: "projects".into(),
+            project_order: "manual".into(),
         }
     }
 }

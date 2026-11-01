@@ -92,6 +92,21 @@ fn add_str(app: &Rc<App>, name: &str, f: impl Fn(&Rc<App>, &str) + 'static) {
     app.gtk_app.add_action(&action);
 }
 
+/// A radio choice kept in a setting: `app.<name>::<value>` menu items.
+fn add_choice(app: &Rc<App>, name: &str, initial: &str, apply: impl Fn(&Rc<App>, &str) + 'static) {
+    let action =
+        gio::SimpleAction::new_stateful(name, Some(glib::VariantTy::STRING), &initial.to_variant());
+    let weak = Rc::downgrade(app);
+    action.connect_activate(move |action, param| {
+        let (Some(app), Some(value)) = (weak.upgrade(), param.and_then(|p| p.str())) else {
+            return;
+        };
+        action.set_state(&value.to_variant());
+        apply(&app, value);
+    });
+    app.gtk_app.add_action(&action);
+}
+
 fn add_id(app: &Rc<App>, name: &str, f: impl Fn(&Rc<App>, Uuid) + 'static) {
     add_str(app, name, move |app, text| {
         if let Ok(id) = Uuid::parse_str(text) {
@@ -239,6 +254,22 @@ pub fn install(app: &Rc<App>) {
     app.gtk_app.add_action(&toggle);
     add_str(app, "panel-tab", |app, tab| {
         crate::ui::panel::show_tab(app, tab)
+    });
+
+    let (view, order) = {
+        let settings = app.settings.borrow();
+        (
+            settings.sidebar_view.clone(),
+            settings.project_order.clone(),
+        )
+    };
+    add_choice(app, "sidebar-view", &view, |app, value| {
+        app.update_settings(|s| s.sidebar_view = value.to_string());
+        app.refresh_sidebar();
+    });
+    add_choice(app, "project-order", &order, |app, value| {
+        app.update_settings(|s| s.project_order = value.to_string());
+        app.refresh_sidebar();
     });
 
     // App

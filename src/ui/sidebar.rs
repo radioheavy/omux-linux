@@ -3,6 +3,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
@@ -22,6 +23,8 @@ pub struct Sidebar {
     hovered: Cell<Option<Uuid>>,
     /// Set while the sidebar selects a row itself, so it isn't taken as a click.
     syncing: Cell<bool>,
+    /// The rows as last built, to notice when the activity order changes.
+    shown: RefCell<Vec<Uuid>>,
 }
 
 struct SessionRow {
@@ -135,6 +138,27 @@ impl Sidebar {
             .tooltip_text("Main menu")
             .build();
         bar.pack_end(&menu_button);
+        let sort = gio::Menu::new();
+        let view = gio::Menu::new();
+        view.append(Some("Projects"), Some("app.sidebar-view::projects"));
+        view.append(
+            Some("All Conversations, Latest First"),
+            Some("app.sidebar-view::recent"),
+        );
+        sort.append_section(Some("Show"), &view);
+        let order = gio::Menu::new();
+        order.append(Some("Manual"), Some("app.project-order::manual"));
+        order.append(
+            Some("Latest Activity First"),
+            Some("app.project-order::recent"),
+        );
+        sort.append_section(Some("Order Projects"), &order);
+        let sort_button = gtk::MenuButton::builder()
+            .icon_name("view-sort-descending-symbolic")
+            .menu_model(&sort)
+            .tooltip_text("Show and order sessions")
+            .build();
+        bar.pack_end(&sort_button);
         for (icon, action, tip) in [
             (
                 "document-open-recent-symbolic",
@@ -189,6 +213,7 @@ impl Sidebar {
             menu,
             hovered: Cell::new(None),
             syncing: Cell::new(false),
+            shown: RefCell::new(Vec::new()),
         }
     }
 
@@ -247,9 +272,13 @@ impl Sidebar {
 }
 
 /// The second line: branch for worktree sessions, status, agent count.
-fn secondary_line(app: &App, _group: &TabGroup, tab: &TabItem, rt: &TabRuntime) -> String {
+fn secondary_line(app: &App, group: &TabGroup, tab: &TabItem, rt: &TabRuntime) -> String {
     let show_folder = app.settings.borrow().show_folder_path;
     let mut parts = Vec::new();
+    // Without project headers, each row names its project.
+    if app.settings.borrow().sidebar_view == "recent" {
+        parts.push(group.name.clone());
+    }
     if let Some(worktree) = &tab.worktree {
         parts.push(format!("⎇ {}", worktree.branch));
     }
@@ -270,21 +299,136 @@ fn secondary_line(app: &App, _group: &TabGroup, tab: &TabItem, rt: &TabRuntime) 
     parts.join(" · ")
 }
 
+/// A sidebar row: a project header, or a session.
+#[derive(Debug, Clone)]
+pub enum Item {
+    Group(TabGroup),
+    Tab(TabItem),
+}
+
+impl Item {
+    fn id(&self) -> Uuid {
+        match self {
+            Item::Group(g) => g.id,
+            Item::Tab(t) => t.id,
+        }
+    }
+}
+
+/// Seconds since the epoch.
+fn seconds(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+/// When each session last did something: its Claude Code transcript's last
+/// write, or the last status change seen this run, whichever is later.
+fn activity_times(app: &App) -> HashMap<Uuid, u64> {
+    let transcripts = crate::claude::transcript_times();
+    let runtime = app.runtime.borrow();
+    app.ws
+        .borrow()
+        .groups
+        .iter()
+        .flat_map(|g| g.tabs.iter())
+        .map(|tab| {
+            let transcript = transcripts.get(&tab.claude_session_id).copied();
+            let seen = runtime.get(&tab.id).and_then(|rt| rt.touched);
+            let time = transcript.max(seen).map_or(0, seconds);
+            (tab.id, time)
+        })
+        .collect()
+}
+
+/// The rows in display order. `recent` lists every session, latest activity
+/// first, with no project headers. Otherwise projects with their sessions,
+/// either in their saved order or, with `by_activity`, latest first. Ties
+/// keep the saved order.
+pub fn layout(
+    groups: &[TabGroup],
+    times: &HashMap<Uuid, u64>,
+    recent: bool,
+    by_activity: bool,
+) -> Vec<Item> {
+    let time = |tab: &TabItem| times.get(&tab.id).copied().unwrap_or(0);
+    if recent {
+        let mut tabs: Vec<&TabItem> = groups.iter().flat_map(|g| g.tabs.iter()).collect();
+        tabs.sort_by_key(|t| std::cmp::Reverse(time(t)));
+        return tabs.into_iter().map(|t| Item::Tab(t.clone())).collect();
+    }
+    let mut groups = groups.to_vec();
+    if by_activity {
+        for group in &mut groups {
+            group.tabs.sort_by_key(|t| std::cmp::Reverse(time(t)));
+        }
+        groups.sort_by_key(|g| std::cmp::Reverse(g.tabs.iter().map(time).max().unwrap_or(0)));
+    }
+    let mut items = Vec::new();
+    for group in groups {
+        let tabs = if group.is_collapsed {
+            Vec::new()
+        } else {
+            group.tabs.clone()
+        };
+        items.push(Item::Group(group));
+        items.extend(tabs.into_iter().map(Item::Tab));
+    }
+    items
+}
+
+fn current_layout(app: &App) -> Vec<Item> {
+    let (recent, by_activity) = {
+        let settings = app.settings.borrow();
+        (
+            settings.sidebar_view == "recent",
+            settings.project_order == "recent",
+        )
+    };
+    let times = if recent || by_activity {
+        activity_times(app)
+    } else {
+        HashMap::new()
+    };
+    layout(&app.ws.borrow().groups, &times, recent, by_activity)
+}
+
+/// Sessions in the order the sidebar shows them, collapsed ones included,
+/// for next / previous session.
+pub fn tab_order(app: &App) -> Vec<Uuid> {
+    let recent = app.settings.borrow().sidebar_view == "recent";
+    let by_activity = app.settings.borrow().project_order == "recent";
+    let times = if recent || by_activity {
+        activity_times(app)
+    } else {
+        HashMap::new()
+    };
+    let mut groups = app.ws.borrow().groups.clone();
+    for group in &mut groups {
+        group.is_collapsed = false;
+    }
+    layout(&groups, &times, recent, by_activity)
+        .into_iter()
+        .filter_map(|item| match item {
+            Item::Tab(t) => Some(t.id),
+            Item::Group(_) => None,
+        })
+        .collect()
+}
+
 pub fn rebuild(app: &Rc<App>) {
     let sidebar = &app.ui.sidebar;
     sidebar.syncing.set(true);
     sidebar.list.remove_all();
     sidebar.rows.borrow_mut().clear();
-    let groups = app.ws.borrow().groups.clone();
-    for group in &groups {
-        sidebar.list.append(&group_row(app, group));
-        if group.is_collapsed {
-            continue;
-        }
-        for tab in &group.tabs {
-            let row = session_row(app, tab);
-            sidebar.list.append(&row.row);
-            sidebar.rows.borrow_mut().insert(tab.id, row);
+    let items = current_layout(app);
+    *sidebar.shown.borrow_mut() = items.iter().map(Item::id).collect();
+    for item in &items {
+        match item {
+            Item::Group(group) => sidebar.list.append(&group_row(app, group)),
+            Item::Tab(tab) => {
+                let row = session_row(app, tab);
+                sidebar.list.append(&row.row);
+                sidebar.rows.borrow_mut().insert(tab.id, row);
+            }
         }
     }
     sidebar.syncing.set(false);
@@ -293,6 +437,27 @@ pub fn rebuild(app: &Rc<App>) {
         sidebar.update_row(app, id);
     }
     sidebar.select_row(app.selected.get());
+}
+
+/// Moves rows when the activity order changes, unless the user is in the
+/// middle of something in the sidebar (renaming, hovering a row).
+fn resort_if_needed(app: &Rc<App>) {
+    let sidebar = &app.ui.sidebar;
+    let sorted = {
+        let settings = app.settings.borrow();
+        settings.sidebar_view == "recent" || settings.project_order == "recent"
+    };
+    if !sorted
+        || app.renaming.get().is_some()
+        || app.renaming_group.get().is_some()
+        || sidebar.hovered.get().is_some()
+    {
+        return;
+    }
+    let ids: Vec<Uuid> = current_layout(app).iter().map(Item::id).collect();
+    if *sidebar.shown.borrow() != ids {
+        rebuild(app);
+    }
 }
 
 fn group_row(app: &Rc<App>, group: &TabGroup) -> gtk::ListBoxRow {
@@ -604,6 +769,14 @@ fn group_of_row(app: &Rc<App>, kind: &str, id: Uuid) -> Option<Uuid> {
 pub fn connect(app: &Rc<App>) {
     let sidebar = &app.ui.sidebar;
     let weak = Rc::downgrade(app);
+    glib::timeout_add_local(Duration::from_secs(5), move || {
+        let Some(app) = weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        resort_if_needed(&app);
+        glib::ControlFlow::Continue
+    });
+    let weak = Rc::downgrade(app);
     sidebar.list.connect_row_activated(move |_, row| {
         let Some(app) = weak.upgrade() else { return };
         if app.ui.sidebar.syncing.get() {
@@ -674,6 +847,10 @@ pub fn connect(app: &Rc<App>) {
         let Some(app) = weak.upgrade() else {
             return false;
         };
+        // The recent list has no projects to drop into.
+        if app.settings.borrow().sidebar_view == "recent" {
+            return false;
+        }
         let Ok(payload) = value.get::<String>() else {
             return false;
         };
@@ -844,4 +1021,56 @@ fn empty_menu() -> gio::Menu {
     bottom.append(Some("New Shell"), Some("app.new-shell"));
     menu.append_section(None, &bottom);
     menu
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn group(name: &str, tabs: &[u128]) -> TabGroup {
+        let tabs = tabs
+            .iter()
+            .map(|n| {
+                let mut tab = TabItem::new(format!("t{n}"));
+                tab.id = Uuid::from_u128(*n);
+                tab
+            })
+            .collect();
+        TabGroup::new(name, None, tabs)
+    }
+
+    fn names(items: &[Item]) -> Vec<String> {
+        items
+            .iter()
+            .map(|item| match item {
+                Item::Group(g) => g.name.clone(),
+                Item::Tab(t) => t.name.clone(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn layouts() {
+        let mut collapsed = group("c", &[5]);
+        collapsed.is_collapsed = true;
+        let groups = vec![group("a", &[1, 2]), group("b", &[3, 4]), collapsed];
+        // 4 is the latest, then 1, 5, 2; 3 never ran.
+        let times: HashMap<Uuid, u64> = [(1, 30), (2, 10), (4, 40), (5, 20)]
+            .into_iter()
+            .map(|(n, t)| (Uuid::from_u128(n), t))
+            .collect();
+
+        assert_eq!(
+            names(&layout(&groups, &times, false, false)),
+            ["a", "t1", "t2", "b", "t3", "t4", "c"]
+        );
+        assert_eq!(
+            names(&layout(&groups, &times, false, true)),
+            ["b", "t4", "t3", "a", "t1", "t2", "c"]
+        );
+        assert_eq!(
+            names(&layout(&groups, &times, true, false)),
+            ["t4", "t1", "t5", "t2", "t3"]
+        );
+    }
 }

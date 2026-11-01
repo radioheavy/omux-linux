@@ -29,6 +29,8 @@ pub struct TabRuntime {
     pub needs_attention: bool,
     /// The title changed while unwatched.
     pub has_activity: bool,
+    /// The last status change seen this run, for ordering by activity.
+    pub touched: Option<std::time::SystemTime>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

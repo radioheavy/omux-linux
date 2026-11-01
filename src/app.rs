@@ -345,6 +345,7 @@ impl App {
                 exited: started.is_err(),
                 cwd: Some(dir.display().to_string()),
                 needs_attention: rt.needs_attention,
+                touched: rt.touched,
                 ..TabRuntime::default()
             };
         });
@@ -626,6 +627,7 @@ impl App {
         });
         let after = self.rt(id).status_state;
         if after != before {
+            self.update_rt(id, |rt| rt.touched = Some(std::time::SystemTime::now()));
             self.notify_status_change(id);
         }
     }
@@ -976,7 +978,7 @@ impl App {
 
     /// Next or previous session across projects, wrapping around.
     pub fn select_relative(self: &Rc<Self>, offset: isize) {
-        let ids = self.all_tab_ids();
+        let ids = crate::ui::sidebar::tab_order(self);
         if ids.is_empty() {
             return;
         }

@@ -1,5 +1,13 @@
 # Changelog (Linux)
 
+## 0.4.0
+
+- **Show and order sessions.** A new button at the top of the sidebar:
+  - **All Conversations, Latest First:** every session in one list, without project headers, ordered by its latest activity. Each row names its project.
+  - **Order Projects › Latest Activity First:** projects, and the sessions in them, ordered by their latest activity. Manual keeps the order you drag them into.
+  - Latest activity is the last write to the Claude Code conversation, or the last status change. The list re-sorts by itself, but not while you hover over it or rename something.
+  - Next and previous session follow the order on screen.
+
 ## 0.3.0
 
 - **Skip permission prompts.** A new switch in Settings › Sessions. When it is on, Claude Code sessions start with `--dangerously-skip-permissions`, and Codex sessions run without approvals or a sandbox. It is off by default and applies to sessions started after you turn it on.

@@ -41,6 +41,23 @@ pub fn conversation_exists(session: Uuid) -> bool {
     project_dirs().iter().any(|dir| dir.join(&name).is_file())
 }
 
+/// When each conversation's transcript was last written, by session id.
+pub fn transcript_times() -> HashMap<Uuid, SystemTime> {
+    project_dirs()
+        .iter()
+        .filter_map(|dir| std::fs::read_dir(dir).ok())
+        .flat_map(|entries| entries.flatten())
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.extension()? != "jsonl" {
+                return None;
+            }
+            let id = Uuid::parse_str(path.file_stem()?.to_str()?).ok()?;
+            Some((id, modified(&path)?))
+        })
+        .collect()
+}
+
 // MARK: recent conversations
 
 #[derive(Debug, Clone)]

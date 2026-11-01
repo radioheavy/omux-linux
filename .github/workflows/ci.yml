@@ -77,6 +77,9 @@ jobs:
             gdbus call --session --dest io.github.radioheavy.omux --object-path /io/github/radioheavy/omux \
               --method org.gtk.Actions.Activate panel-tab "[<\"changes\">]" "{}" > /dev/null; sleep 3
             import -window root "$RUNNER_TEMP/shots/changes.png"
+            gdbus call --session --dest io.github.radioheavy.omux --object-path /io/github/radioheavy/omux \
+              --method org.gtk.Actions.Activate sidebar-view "[<\"recent\">]" "{}" > /dev/null; sleep 2
+            import -window root "$RUNNER_TEMP/shots/recent.png"
             act settings
             import -window root "$RUNNER_TEMP/shots/settings.png"
             kill $pid || true'
