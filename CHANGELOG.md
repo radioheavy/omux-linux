@@ -1,5 +1,9 @@
 # Changelog (Linux)
 
+## 0.8.0
+
+- **Close idle sessions.** Settings › Sessions › Close idle agent sessions after (5 minutes to 1 hour; off by default). A Claude Code or Codex session nobody typed into, whose status hasn't changed for that long, closes to free its memory. The last 5 minutes count down in the sidebar ("Closes in 4:12"). Selecting the session later continues its conversation. Sessions that are working, waiting for you or have running subagents, the selected session and plain shells stay open.
+
 ## 0.7.0
 
 - **Click to continue.** Selecting a session restored at launch now starts its agent and continues the conversation, without pressing ▶. This includes the session that was selected when omux quit. Settings › Sessions › Continue a session when you select it turns this off.

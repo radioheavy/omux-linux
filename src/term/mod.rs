@@ -50,6 +50,8 @@ pub struct SessionTerminal {
     handler: RefCell<Option<Handler>>,
     /// Popovers parented to the terminal; unparented before it goes away.
     popovers: RefCell<Vec<gtk::Popover>>,
+    /// The last keystroke or paste, or the start; for closing idle sessions.
+    pub last_input: Cell<std::time::Instant>,
 }
 
 impl SessionTerminal {
@@ -69,11 +71,13 @@ impl SessionTerminal {
             size: Cell::new((0, 0)),
             handler: RefCell::new(None),
             popovers: RefCell::new(Vec::new()),
+            last_input: Cell::new(std::time::Instant::now()),
         });
 
         let weak = Rc::downgrade(&this);
         this.widget.connect_commit(move |_, text, _| {
             if let Some(this) = weak.upgrade() {
+                this.last_input.set(std::time::Instant::now());
                 this.write(text.as_bytes());
             }
         });
@@ -160,6 +164,7 @@ impl SessionTerminal {
         env: crate::session_env::Env,
     ) -> std::io::Result<i32> {
         self.kill();
+        self.last_input.set(std::time::Instant::now());
         // Bounded: a flood of output waits in the PTY until the UI catches up.
         let (tx, rx) = async_channel::bounded(16);
         let rows = self.widget.row_count().max(1) as u16;

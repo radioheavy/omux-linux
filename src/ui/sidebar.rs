@@ -276,6 +276,9 @@ impl Sidebar {
 fn secondary_line(app: &App, group: &TabGroup, tab: &TabItem, rt: &TabRuntime) -> String {
     let show_folder = app.settings.borrow().show_folder_path;
     let mut parts = Vec::new();
+    if let Some(seconds) = rt.closes_in {
+        parts.push(format!("Closes in {}:{:02}", seconds / 60, seconds % 60));
+    }
     // Without project headers, each row names its project.
     if app.settings.borrow().sidebar_view == "recent" {
         parts.push(group.name.clone());

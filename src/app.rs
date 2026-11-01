@@ -108,6 +108,7 @@ impl App {
         }
         // After the auto-resume pass, so imported sessions wait to be selected.
         crate::import::first_launch(&app);
+        crate::idle::install(&app);
         let weak = Rc::downgrade(&app);
         crate::search::watch(move |index| {
             if let Some(app) = weak.upgrade() {
@@ -785,6 +786,18 @@ impl App {
         self.schedule_save();
         self.refresh_sidebar();
         self.select(id);
+    }
+
+    /// Ends an idle session to free its memory. Its conversation continues
+    /// when it is selected again.
+    pub fn close_idle(self: &Rc<Self>, id: Uuid) {
+        self.kill(id);
+        self.remove_terminal(id);
+        self.update_rt(id, |rt| {
+            rt.resume_on_select = true;
+            rt.closes_in = None;
+        });
+        self.refresh_session(id);
     }
 
     /// A plain terminal in the same project and folder as a session (its

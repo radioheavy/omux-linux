@@ -177,6 +177,28 @@ pub fn present(app: &Rc<App>) {
         }
     });
     sessions.add(&on_select);
+    const IDLE: [(u32, &str); 6] = [
+        (0, "Never"),
+        (5, "5 minutes"),
+        (10, "10 minutes"),
+        (15, "15 minutes"),
+        (30, "30 minutes"),
+        (60, "1 hour"),
+    ];
+    let labels: Vec<&str> = IDLE.iter().map(|(_, l)| *l).collect();
+    let index = IDLE
+        .iter()
+        .position(|(m, _)| *m == settings.idle_close_minutes)
+        .unwrap_or(0);
+    let idle = combo("Close idle agent sessions after", &labels, index);
+    idle.set_subtitle("Frees the memory of Claude Code and Codex sessions nobody uses. The last minutes count down in the sidebar. Select the session to continue its conversation. Sessions that are working, waiting for you, selected or plain shells stay open.");
+    let weak = Rc::downgrade(app);
+    idle.connect_selected_notify(move |row| {
+        let Some(app) = weak.upgrade() else { return };
+        let minutes = IDLE[row.selected() as usize].0;
+        app.update_settings(|s| s.idle_close_minutes = minutes);
+    });
+    sessions.add(&idle);
     let quit = switch(
         "Confirm before quitting while sessions are running",
         Some("Quitting stops every session. Saved Claude Code and Codex conversations can be continued on the next launch."),

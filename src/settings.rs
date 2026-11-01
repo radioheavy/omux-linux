@@ -44,6 +44,8 @@ pub struct Settings {
     pub project_order: String,
     /// Selecting a restored session continues its agent (Linux only).
     pub resume_on_select: bool,
+    /// Agent sessions idle this long close; 0 never (Linux only).
+    pub idle_close_minutes: u32,
 }
 
 impl Default for Settings {
@@ -72,6 +74,7 @@ impl Default for Settings {
             sidebar_view: "projects".into(),
             project_order: "manual".into(),
             resume_on_select: true,
+            idle_close_minutes: 0,
         }
     }
 }

@@ -34,6 +34,8 @@ pub struct TabRuntime {
     /// Restored at launch and not started yet: selecting it continues the
     /// agent instead of opening a plain shell (Settings, Linux only).
     pub resume_on_select: bool,
+    /// Seconds until an idle session closes, shown in its last minutes.
+    pub closes_in: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
