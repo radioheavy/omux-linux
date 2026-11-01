@@ -1,5 +1,14 @@
 # Changelog (Linux)
 
+## 0.9.0
+
+- **Remote projects.** Main menu › New Remote Project… runs a project's sessions on another machine over SSH, such as a cloud server. Each session runs inside `dtach` on the host, so it keeps working when omux or your computer is off. Selecting it again reattaches to the same screen. Claude Code's status (working, needs you, done) still shows in the sidebar.
+  - The host needs `dtach` and Claude Code. Any name from `~/.ssh/config` works as the host.
+  - Claude sessions continue their conversation on the host. Skip permission prompts applies there too.
+  - Kill Session and Close Session end the session on the host. Closing an idle session only disconnects it; it keeps running on the host.
+  - Edit Project has an SSH host field, to turn a project into a remote one or back.
+  - The Files and Changes panels, worktrees and conversation search still work on this computer only.
+
 ## 0.8.0
 
 - **Close idle sessions.** Settings › Sessions › Close idle agent sessions after (5 minutes to 1 hour; off by default). A Claude Code or Codex session nobody typed into, whose status hasn't changed for that long, closes to free its memory. The last 5 minutes count down in the sidebar ("Closes in 4:12"). Selecting the session later continues its conversation. Sessions that are working, waiting for you or have running subagents, the selected session and plain shells stay open.

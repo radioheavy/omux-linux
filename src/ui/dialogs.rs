@@ -11,7 +11,7 @@ use crate::model::SessionProvider;
 use crate::persistence::abbreviate_home;
 
 /// A dialog with Cancel / primary buttons in its header and `page` as content.
-fn form(title: &str, primary: &str, page: &adw::PreferencesPage) -> (adw::Dialog, gtk::Button) {
+pub fn form(title: &str, primary: &str, page: &adw::PreferencesPage) -> (adw::Dialog, gtk::Button) {
     let dialog = adw::Dialog::new();
     dialog.set_title(title);
     dialog.set_content_width(480);
@@ -255,6 +255,10 @@ pub fn edit_project(app: &Rc<App>, group_id: Uuid) {
     main.add(&name);
     let folder = folder_row(app, "Folder", group.directory.as_deref(), "~");
     main.add(&folder);
+    let host = adw::EntryRow::new();
+    host.set_title("SSH host (sessions run there)");
+    host.set_text(group.ssh_host.as_deref().unwrap_or(""));
+    main.add(&host);
     page.add(&main);
 
     let sessions = adw::PreferencesGroup::new();
@@ -323,7 +327,9 @@ pub fn edit_project(app: &Rc<App>, group_id: Uuid) {
         let folder = trimmed(&folder);
         let use_worktrees = use_worktrees.is_active();
         let setup = setup.text().trim().to_string();
+        let host = trimmed(&host);
         app.update_group(group_id, |g| {
+            g.ssh_host = host;
             if let Some(name) = name {
                 g.name = name;
             }

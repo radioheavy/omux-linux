@@ -11,6 +11,7 @@ mod model;
 mod notify;
 mod persistence;
 mod pulls;
+mod remote;
 mod runtime;
 mod search;
 mod session_env;

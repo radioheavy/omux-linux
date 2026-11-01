@@ -375,7 +375,8 @@ impl App {
             );
             return;
         }
-        if provider == SessionProvider::Codex && command.is_none() {
+        // Remote Codex runs as a plain TUI on the host.
+        if provider == SessionProvider::Codex && command.is_none() && group.ssh_host.is_none() {
             crate::codex::start(self, id, &dir);
             return;
         }
@@ -407,6 +408,9 @@ impl App {
             .trim_matches(' ')
             .to_string();
         let provider = tab.resolved_provider(&group);
+        if let Some(host) = group.ssh_host.as_deref() {
+            return Some(self.remote_command(host, &group, &tab, provider, &raw));
+        }
         if provider == SessionProvider::Shell || raw.is_empty() {
             return None;
         }
@@ -424,6 +428,33 @@ impl App {
             tab.claude_session_id,
             exists,
         ))
+    }
+
+    /// A remote project's session: the agent (or a login shell) inside
+    /// dtach on the host, reached over SSH.
+    fn remote_command(
+        &self,
+        host: &str,
+        group: &TabGroup,
+        tab: &TabItem,
+        provider: SessionProvider,
+        raw: &str,
+    ) -> String {
+        let inner = match provider {
+            SessionProvider::Claude if raw.split_whitespace().next() == Some("claude") => {
+                let raw = if self.settings.borrow().skip_permissions {
+                    with_skip_permissions(raw)
+                } else {
+                    raw.to_string()
+                };
+                let args = raw.strip_prefix("claude").unwrap_or("");
+                crate::remote::claude(tab.claude_session_id, args)
+            }
+            _ if provider == SessionProvider::Shell || raw.is_empty() => "exec bash -l".into(),
+            _ => format!("exec {raw}"),
+        };
+        let dir = tab.directory.as_deref().or(group.directory.as_deref());
+        crate::remote::command(host, dir, tab.id, &inner)
     }
 
     pub fn start_all_sessions(self: &Rc<Self>, first: Option<Uuid>) {
@@ -541,6 +572,21 @@ impl App {
     }
 
     pub fn kill(self: &Rc<Self>, id: Uuid) {
+        self.kill_remote(id);
+        self.detach(id);
+    }
+
+    /// Ends a remote session on its host (it outlives the local SSH).
+    fn kill_remote(&self, id: Uuid) {
+        if let Some((group, _)) = self.tab(id) {
+            if let Some(host) = group.ssh_host.as_deref() {
+                crate::remote::kill(host, id);
+            }
+        }
+    }
+
+    /// Ends the local process; a remote session keeps running on its host.
+    fn detach(self: &Rc<Self>, id: Uuid) {
         crate::codex::close(self, id);
         if let Some(term) = self.terminal(id) {
             term.kill();
@@ -791,7 +837,7 @@ impl App {
     /// Ends an idle session to free its memory. Its conversation continues
     /// when it is selected again.
     pub fn close_idle(self: &Rc<Self>, id: Uuid) {
-        self.kill(id);
+        self.detach(id);
         self.remove_terminal(id);
         self.update_rt(id, |rt| {
             rt.resume_on_select = true;
@@ -869,6 +915,7 @@ impl App {
         let Some((gi, ti)) = self.find(id) else {
             return;
         };
+        self.kill_remote(id);
         crate::codex::close(self, id);
         crate::codex::forget(id);
         self.remove_terminal(id);

@@ -245,6 +245,10 @@ pub struct TabGroup {
     /// ignored files like `.env` or install dependencies. Empty runs nothing.
     pub worktree_setup: String,
     pub tabs: Vec<TabItem>,
+    /// An SSH host: the project's sessions run there, inside `dtach`, and
+    /// keep running when omux disconnects (Linux only).
+    #[serde(rename = "sshHost", skip_serializing_if = "Option::is_none")]
+    pub ssh_host: Option<String>,
 }
 
 impl TabGroup {
@@ -261,6 +265,7 @@ impl TabGroup {
             use_worktrees: false,
             worktree_setup: String::new(),
             tabs,
+            ssh_host: None,
         }
     }
 }
@@ -288,6 +293,8 @@ impl<'de> Deserialize<'de> for TabGroup {
             worktree_setup: String,
             #[serde(default)]
             tabs: Vec<TabItem>,
+            #[serde(default, rename = "sshHost")]
+            ssh_host: Option<String>,
         }
         let raw = Raw::deserialize(deserializer)?;
         let provider = raw
@@ -303,6 +310,7 @@ impl<'de> Deserialize<'de> for TabGroup {
             use_worktrees: raw.use_worktrees,
             worktree_setup: raw.worktree_setup,
             tabs: raw.tabs,
+            ssh_host: raw.ssh_host.filter(|h| !h.trim().is_empty()),
         })
     }
 }

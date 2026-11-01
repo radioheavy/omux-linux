@@ -90,6 +90,7 @@ impl Sidebar {
         let menu = gio::Menu::new();
         let section = gio::Menu::new();
         section.append(Some("New Project"), Some("app.new-project"));
+        section.append(Some("New Remote Project…"), Some("app.new-remote-project"));
         section.append(Some("New Claude Code Session"), Some("app.new-claude"));
         section.append(Some("New Codex Session"), Some("app.new-codex"));
         section.append(Some("New Shell"), Some("app.new-shell"));
@@ -498,6 +499,12 @@ fn group_row(app: &Rc<App>, group: &TabGroup) -> gtk::ListBoxRow {
             entry.grab_focus();
         });
     } else {
+        if let Some(host) = &group.ssh_host {
+            let icon = gtk::Image::from_icon_name("network-server-symbolic");
+            icon.set_opacity(0.6);
+            icon.set_tooltip_text(Some(&format!("Runs on {host}")));
+            hbox.append(&icon);
+        }
         let name = gtk::Label::new(Some(&group.name));
         name.add_css_class("omux-project");
         name.set_xalign(0.0);
@@ -1014,6 +1021,7 @@ fn empty_menu() -> gio::Menu {
     let top = gio::Menu::new();
     top.append(Some("New Project"), Some("app.new-project"));
     top.append(Some("Open Folder as Project…"), Some("app.open-folder"));
+    top.append(Some("New Remote Project…"), Some("app.new-remote-project"));
     top.append(Some("Open Recent Conversation…"), Some("app.open-recent"));
     top.append(
         Some("Import Claude Code Conversations"),
