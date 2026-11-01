@@ -37,6 +37,10 @@ pub struct Entry {
     pub date: i64,
     /// How far the transcript has been read (always at a line end).
     pub offset: u64,
+    /// The transcript's size when last read; a partial last line makes it
+    /// larger than `offset`.
+    #[serde(default)]
+    pub size: u64,
     /// The user's messages, one per line.
     pub user: String,
     /// Claude's replies, one per line.
@@ -227,7 +231,8 @@ fn update(entries: &mut Vec<Entry>, dirs: &[PathBuf]) -> bool {
                     ..Entry::default()
                 };
             }
-            if meta.len() > entry.offset {
+            if meta.len() != entry.size {
+                entry.size = meta.len();
                 read_new(&mut entry);
                 entry.date = meta.modified().map(seconds).unwrap_or(0);
                 changed = true;
