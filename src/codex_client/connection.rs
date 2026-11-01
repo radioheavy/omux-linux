@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -74,17 +75,35 @@ pub fn token_digest(token: &str) -> String {
         .collect()
 }
 
+/// Settings › Skip permission prompts, read when a server starts.
+pub static SKIP_PERMISSIONS: AtomicBool = AtomicBool::new(false);
+
+/// What the server's conversations run with when permission prompts are
+/// skipped: no approvals and no sandbox.
+const SKIP_PERMISSIONS_CONFIG: &str =
+    " -c 'approval_policy=\"never\"' -c 'sandbox_mode=\"danger-full-access\"'";
+
 /// The command line the login shell `exec`s to start the private server.
-pub fn server_command(endpoint: &str, digest: &str) -> String {
+pub fn server_command(endpoint: &str, digest: &str, skip_permissions: bool) -> String {
+    let extra = if skip_permissions {
+        SKIP_PERMISSIONS_CONFIG
+    } else {
+        ""
+    };
     format!(
-        "exec codex app-server --listen {endpoint} --ws-auth capability-token --ws-token-sha256 {digest} -c 'analytics.enabled=false'"
+        "exec codex app-server --listen {endpoint} --ws-auth capability-token --ws-token-sha256 {digest} -c 'analytics.enabled=false'{extra}"
     )
 }
 
 /// The line typed into the tab's shell to attach the TUI to the same server.
-pub fn resume_command(endpoint: &str, thread_id: &str) -> String {
+pub fn resume_command(endpoint: &str, thread_id: &str, skip_permissions: bool) -> String {
+    let extra = if skip_permissions {
+        " --dangerously-bypass-approvals-and-sandbox"
+    } else {
+        ""
+    };
     format!(
-        "codex resume --remote {} --remote-auth-token-env OMUX_CODEX_TOKEN --no-alt-screen {}",
+        "codex resume --remote {} --remote-auth-token-env OMUX_CODEX_TOKEN --no-alt-screen{extra} {}",
         shell_quote(endpoint),
         shell_quote(thread_id)
     )
@@ -242,7 +261,11 @@ impl Conn {
             .unwrap_or_else(|| "/bin/sh".to_string());
         let mut child = Command::new(shell)
             .arg("-lc")
-            .arg(server_command(endpoint, &token_digest(&self.token)))
+            .arg(server_command(
+                endpoint,
+                &token_digest(&self.token),
+                SKIP_PERMISSIONS.load(Ordering::Relaxed),
+            ))
             .env_clear()
             .envs(&env)
             .current_dir(&home)
@@ -592,12 +615,23 @@ mod tests {
     #[test]
     fn launch_and_resume_lines_match_the_mac_app() {
         assert_eq!(
-            server_command("ws://127.0.0.1:4000", "dead"),
+            server_command("ws://127.0.0.1:4000", "dead", false),
             "exec codex app-server --listen ws://127.0.0.1:4000 --ws-auth capability-token --ws-token-sha256 dead -c 'analytics.enabled=false'"
         );
         assert_eq!(
-            resume_command("ws://127.0.0.1:4000", "thr'1"),
+            resume_command("ws://127.0.0.1:4000", "thr'1", false),
             "codex resume --remote 'ws://127.0.0.1:4000' --remote-auth-token-env OMUX_CODEX_TOKEN --no-alt-screen 'thr'\\''1'"
+        );
+    }
+
+    #[test]
+    fn skipping_permissions_turns_off_approvals_and_the_sandbox() {
+        assert!(server_command("ws://127.0.0.1:4000", "dead", true).ends_with(
+            "-c 'analytics.enabled=false' -c 'approval_policy=\"never\"' -c 'sandbox_mode=\"danger-full-access\"'"
+        ));
+        assert_eq!(
+            resume_command("ws://127.0.0.1:4000", "t", true),
+            "codex resume --remote 'ws://127.0.0.1:4000' --remote-auth-token-env OMUX_CODEX_TOKEN --no-alt-screen --dangerously-bypass-approvals-and-sandbox 't'"
         );
     }
 

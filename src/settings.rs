@@ -34,6 +34,9 @@ pub struct Settings {
     pub welcomed: bool,
     /// Existing Claude Code conversations were added once (Linux only).
     pub imported_claude_conversations: bool,
+    /// Claude Code runs with `--dangerously-skip-permissions`, Codex with no
+    /// approvals and no sandbox (Linux only).
+    pub skip_permissions: bool,
 }
 
 impl Default for Settings {
@@ -58,6 +61,7 @@ impl Default for Settings {
             notify_sound: "Default".into(),
             welcomed: false,
             imported_claude_conversations: false,
+            skip_permissions: false,
         }
     }
 }

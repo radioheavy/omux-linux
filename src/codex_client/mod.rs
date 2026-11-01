@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+pub use connection::SKIP_PERMISSIONS;
 use connection::{lock, resume_command, Conn, Handlers};
 use protocol::{Effect, Protocol};
 
@@ -406,7 +407,14 @@ impl TabClient {
                 background.emit(Update::Usage(usage));
             }
         });
-        Ok((id.clone(), resume_command(&endpoint, &id)))
+        Ok((
+            id.clone(),
+            resume_command(
+                &endpoint,
+                &id,
+                connection::SKIP_PERMISSIONS.load(std::sync::atomic::Ordering::Relaxed),
+            ),
+        ))
     }
 
     pub fn is_ready(&self) -> bool {
@@ -754,10 +762,20 @@ mod tests {
             .start(&folder, Some(first.clone()), "x", "0", tx.clone())
             .unwrap();
         assert_eq!(resumed, first);
+        // The second server skips permission prompts: Codex must accept the
+        // config, and the TUI must know the flag typed for it.
+        SKIP_PERMISSIONS.store(true, std::sync::atomic::Ordering::Relaxed);
         let independent = TabClient::with_env(env);
-        let (third, _) = independent
-            .start(&folder, None, "Independent Omux test", "0", tx)
+        let started = independent.start(&folder, None, "Independent Omux test", "0", tx);
+        SKIP_PERMISSIONS.store(false, std::sync::atomic::Ordering::Relaxed);
+        let (third, command) = started.unwrap();
+        assert!(command.contains(" --dangerously-bypass-approvals-and-sandbox "));
+        let help = std::process::Command::new("codex")
+            .args(["resume", "--help"])
+            .output()
             .unwrap();
+        assert!(String::from_utf8_lossy(&help.stdout)
+            .contains("--dangerously-bypass-approvals-and-sandbox"));
         first_client.close();
         assert_eq!(independent.thread_id(), Some(third));
         assert!(

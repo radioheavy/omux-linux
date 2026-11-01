@@ -66,6 +66,8 @@ impl App {
             renaming_group: Cell::new(None),
         });
 
+        app.sync_settings();
+
         // Restored sessions stay stopped until started, unless auto-resume is on.
         let ids = app.all_tab_ids();
         let resume = app.settings.borrow().auto_resume;
@@ -390,6 +392,11 @@ impl App {
         if provider != SessionProvider::Claude {
             return Some(raw);
         }
+        let raw = if self.settings.borrow().skip_permissions {
+            with_skip_permissions(&raw)
+        } else {
+            raw
+        };
         let exists = crate::claude::conversation_exists(tab.claude_session_id);
         Some(SessionProvider::claude_command(
             &raw,
@@ -1025,6 +1032,15 @@ impl App {
     pub fn update_settings(self: &Rc<Self>, change: impl FnOnce(&mut Settings)) {
         change(&mut self.settings.borrow_mut());
         self.settings.borrow().save();
+        self.sync_settings();
+    }
+
+    /// Hands settings to the code that runs off the GTK thread.
+    pub fn sync_settings(&self) {
+        crate::codex_client::SKIP_PERMISSIONS.store(
+            self.settings.borrow().skip_permissions,
+            std::sync::atomic::Ordering::Relaxed,
+        );
     }
 
     /// Saves, stops Codex servers and ends every session.
@@ -1075,5 +1091,50 @@ impl App {
     pub fn open_uri(&self, uri: &str) {
         let launcher = gtk::UriLauncher::new(uri);
         launcher.launch(Some(&self.ui.window), gio::Cancellable::NONE, |_| {});
+    }
+}
+
+/// Adds `--dangerously-skip-permissions` to a `claude` command that doesn't
+/// already choose a permission mode.
+pub fn with_skip_permissions(raw: &str) -> String {
+    let mut words = raw.split_whitespace();
+    if words.next() != Some("claude") {
+        return raw.to_string();
+    }
+    let chosen = words.any(|w| {
+        w == "--dangerously-skip-permissions"
+            || w == "--permission-mode"
+            || w.starts_with("--permission-mode=")
+    });
+    if chosen {
+        raw.to_string()
+    } else {
+        format!("{raw} --dangerously-skip-permissions")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_skip_permissions;
+
+    #[test]
+    fn skip_permissions_flag() {
+        assert_eq!(
+            with_skip_permissions("claude"),
+            "claude --dangerously-skip-permissions"
+        );
+        assert_eq!(
+            with_skip_permissions("claude --model opus"),
+            "claude --model opus --dangerously-skip-permissions"
+        );
+        assert_eq!(
+            with_skip_permissions("claude --permission-mode plan"),
+            "claude --permission-mode plan"
+        );
+        assert_eq!(
+            with_skip_permissions("claude --dangerously-skip-permissions"),
+            "claude --dangerously-skip-permissions"
+        );
+        assert_eq!(with_skip_permissions("aider"), "aider");
     }
 }

@@ -1,5 +1,9 @@
 # Changelog (Linux)
 
+## 0.3.0
+
+- **Skip permission prompts.** A new switch in Settings › Sessions. When it is on, Claude Code sessions start with `--dangerously-skip-permissions`, and Codex sessions run without approvals or a sandbox. It is off by default and applies to sessions started after you turn it on.
+
 ## 0.2.0
 
 - **Your Claude Code conversations are already there.** At the first launch, omux adds every Claude Code conversation on the computer to the sidebar: one project per folder, newest first. The new projects start collapsed. Nothing runs until you select a session, and selecting one continues its conversation. Main menu › Import Claude Code Conversations adds conversations started since then.

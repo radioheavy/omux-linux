@@ -166,6 +166,15 @@ pub fn present(app: &Rc<App>) {
         app.update_settings(|s| s.confirm_quit = on)
     });
     sessions.add(&quit);
+    let skip = switch(
+        "Skip permission prompts",
+        Some("Claude Code starts with --dangerously-skip-permissions, and Codex runs without approvals or a sandbox. Agents can then change any file and run any command without asking. Applies to sessions started from now on."),
+        settings.skip_permissions,
+    );
+    on_switch(app, &skip, |app, on| {
+        app.update_settings(|s| s.skip_permissions = on)
+    });
+    sessions.add(&skip);
     page.add(&sessions);
 
     // Notifications
