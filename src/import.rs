@@ -227,9 +227,11 @@ mod tests {
             ],
             |_| true,
         );
+        // Newest first: /c, then the existing /a project.
         assert_eq!(planned.len(), 2);
-        assert_eq!(planned[0].existing, Some(group_id));
-        assert_eq!(planned[0].sessions.len(), 1);
+        assert_eq!(planned[0].directory, "/c");
+        assert_eq!(planned[1].existing, Some(group_id));
+        assert_eq!(planned[1].sessions.len(), 1);
 
         let (ids, made) = apply(&mut ws, planned);
         assert_eq!((ids.len(), made), (2, 1));
