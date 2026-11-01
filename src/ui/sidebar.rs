@@ -964,6 +964,7 @@ fn tab_menu(app: &Rc<App>, id: Uuid) -> gio::Menu {
         menu.append_section(None, &section);
     }
     let process = gio::Menu::new();
+    item(&process, "Open Terminal Here", "app.tab-terminal", &target);
     item(&process, "Interrupt (Ctrl-C)", "app.tab-interrupt", &target);
     item(&process, "Restart Session", "app.tab-restart", &target);
     item(&process, "Kill Session", "app.tab-kill", &target);

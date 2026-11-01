@@ -42,6 +42,8 @@ pub struct Settings {
     pub sidebar_view: String,
     /// `manual` or `recent` (latest activity first). Linux only.
     pub project_order: String,
+    /// Selecting a restored session continues its agent (Linux only).
+    pub resume_on_select: bool,
 }
 
 impl Default for Settings {
@@ -69,6 +71,7 @@ impl Default for Settings {
             skip_permissions: false,
             sidebar_view: "projects".into(),
             project_order: "manual".into(),
+            resume_on_select: true,
         }
     }
 }

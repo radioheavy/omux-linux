@@ -1,5 +1,10 @@
 # Changelog (Linux)
 
+## 0.7.0
+
+- **Click to continue.** Selecting a session restored at launch now starts its agent and continues the conversation, without pressing ▶. This includes the session that was selected when omux quit. Settings › Sessions › Continue a session when you select it turns this off.
+- **Open Terminal Here.** Right-click a session for a plain terminal in the same project and folder (its worktree, for a worktree session).
+
 ## 0.6.0
 
 - **Sessions are named after their conversation.** Claude Code gives each conversation a short title, such as "Expo build plan". omux now uses it as the session's name instead of the first words of the first prompt, and keeps it current. A title set with `/rename` wins. A name you gave a session yourself is never replaced.

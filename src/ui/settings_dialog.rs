@@ -157,6 +157,26 @@ pub fn present(app: &Rc<App>) {
         app.update_settings(|s| s.auto_resume = on)
     });
     sessions.add(&resume);
+    let on_select = switch(
+        "Continue a session when you select it",
+        Some("A session restored at launch starts its agent and continues the conversation when you click it. Off: it opens a plain shell and ▶ starts the agent. For a plain terminal any time, right-click a session › Open Terminal Here."),
+        settings.resume_on_select,
+    );
+    on_switch(app, &on_select, |app, on| {
+        app.update_settings(|s| s.resume_on_select = on);
+        // Sessions not started yet follow the new choice.
+        let ids = app.all_tab_ids();
+        for id in ids {
+            if app.terminal(id).is_none() {
+                app.update_rt(id, |rt| {
+                    if rt.exited {
+                        rt.resume_on_select = on;
+                    }
+                });
+            }
+        }
+    });
+    sessions.add(&on_select);
     let quit = switch(
         "Confirm before quitting while sessions are running",
         Some("Quitting stops every session. Saved Claude Code and Codex conversations can be continued on the next launch."),

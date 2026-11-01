@@ -309,6 +309,7 @@ pub fn install(app: &Rc<App>) {
     });
     add_id(app, "tab-interrupt", |app, id| app.stop(id));
     add_id(app, "tab-restart", |app, id| app.restart(id));
+    add_id(app, "tab-terminal", |app, id| app.open_terminal_here(id));
     add_id(app, "tab-kill", |app, id| app.kill(id));
     add_id(app, "tab-close", crate::ui::worktree_actions::request_close);
 

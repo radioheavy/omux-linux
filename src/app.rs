@@ -71,11 +71,15 @@ impl App {
         // Restored sessions stay stopped until started, unless auto-resume is on.
         let ids = app.all_tab_ids();
         let resume = app.settings.borrow().auto_resume;
+        let on_select = app.settings.borrow().resume_on_select;
         for id in &ids {
             let rt = if resume {
                 TabRuntime::default()
             } else {
-                TabRuntime::stopped()
+                TabRuntime {
+                    resume_on_select: on_select,
+                    ..TabRuntime::stopped()
+                }
             };
             app.runtime.borrow_mut().insert(*id, rt);
         }
@@ -236,9 +240,18 @@ impl App {
         self.ws.borrow_mut().selected_tab_id = Some(id);
         self.schedule_save();
         if self.terminal(id).is_none() {
-            let exited = self.rt(id).exited;
-            // A restored session opens its plain shell; ▶ starts the agent.
-            self.create_terminal(id, if exited { Some(String::new()) } else { None });
+            let rt = self.rt(id);
+            // A restored session continues its agent, or (with that setting
+            // off, as on the Mac) opens its plain shell and ▶ starts the agent.
+            let shell_only = rt.exited && !rt.resume_on_select;
+            self.create_terminal(
+                id,
+                if shell_only {
+                    Some(String::new())
+                } else {
+                    None
+                },
+            );
         }
         self.ui.show_terminal(self, id);
         // Deferred so the selection renders first, as on the Mac.
@@ -772,6 +785,22 @@ impl App {
         self.schedule_save();
         self.refresh_sidebar();
         self.select(id);
+    }
+
+    /// A plain terminal in the same project and folder as a session (its
+    /// worktree, for a worktree session), next to it.
+    pub fn open_terminal_here(self: &Rc<Self>, id: Uuid) {
+        let Some((group, tab)) = self.tab(id) else {
+            return;
+        };
+        let dir = self.directory(&group, &tab);
+        let mut terminal = TabItem::new("Terminal");
+        terminal.command = Some(String::new());
+        terminal.provider = Some(SessionProvider::Shell);
+        if group.directory.as_deref().map(expand_tilde) != Some(dir.clone()) {
+            terminal.directory = Some(dir.display().to_string());
+        }
+        self.add_session(group.id, terminal, Some(String::new()), None);
     }
 
     pub fn new_group(self: &Rc<Self>) {

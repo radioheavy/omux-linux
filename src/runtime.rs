@@ -31,6 +31,9 @@ pub struct TabRuntime {
     pub has_activity: bool,
     /// The last status change seen this run, for ordering by activity.
     pub touched: Option<std::time::SystemTime>,
+    /// Restored at launch and not started yet: selecting it continues the
+    /// agent instead of opening a plain shell (Settings, Linux only).
+    pub resume_on_select: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
