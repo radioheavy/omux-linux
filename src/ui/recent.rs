@@ -86,7 +86,11 @@ fn conversation(entry: &Entry) -> Conversation {
         provider: SessionProvider::Claude,
         id: entry.id.to_string().to_lowercase(),
         cwd: entry.cwd.clone(),
-        prompt: entry.prompt.clone(),
+        prompt: if entry.title().is_empty() {
+            entry.prompt.clone()
+        } else {
+            entry.title().to_string()
+        },
         date: entry.date,
     }
 }

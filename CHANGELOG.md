@@ -1,5 +1,10 @@
 # Changelog (Linux)
 
+## 0.6.0
+
+- **Sessions are named after their conversation.** Claude Code gives each conversation a short title, such as "Expo build plan". omux now uses it as the session's name instead of the first words of the first prompt, and keeps it current. A title set with `/rename` wins. A name you gave a session yourself is never replaced.
+- Search results show these titles too.
+
 ## 0.5.0
 
 - **Search inside conversations.** The Conversations sheet (Ctrl+Alt+O, or the clock button) searches the whole text of every Claude Code conversation, not only its first prompt. Case and accents don't matter, so `kopek` finds `köpek`. Each result shows the text around the match.

@@ -17,6 +17,7 @@ mod settings;
 mod swift_json;
 mod term;
 mod theme;
+mod titles;
 mod ui;
 mod usage;
 

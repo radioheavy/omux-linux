@@ -17,13 +17,14 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use gtk::glib;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::persistence::{home_dir, write_atomic};
 
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Entry {
@@ -45,9 +46,27 @@ pub struct Entry {
     pub user: String,
     /// Claude's replies, one per line.
     pub assistant: String,
+    /// The latest title Claude Code generated for the conversation.
+    #[serde(default)]
+    pub ai_title: String,
+    /// Every title it generated, oldest first.
+    #[serde(default)]
+    pub ai_titles: Vec<String>,
+    /// The latest title given with `/rename`.
+    #[serde(default)]
+    pub custom_title: String,
 }
 
 impl Entry {
+    /// The conversation's title: `/rename`'s, else Claude Code's.
+    pub fn title(&self) -> &str {
+        if self.custom_title.is_empty() {
+            &self.ai_title
+        } else {
+            &self.custom_title
+        }
+    }
+
     /// What words are searched in: the prompt, the folder and every message.
     fn haystack(&self) -> String {
         format!(
@@ -134,8 +153,31 @@ fn read_line(entry: &mut Entry, line: &str) {
         return;
     };
     let kind = object.get("type").and_then(Value::as_str);
-    if !matches!(kind, Some("user" | "assistant")) {
-        return;
+    let text = |key: &str| {
+        object
+            .get(key)
+            .and_then(Value::as_str)
+            .map(one_line)
+            .filter(|t| !t.is_empty())
+    };
+    match kind {
+        Some("ai-title") => {
+            if let Some(title) = text("aiTitle") {
+                if !entry.ai_titles.contains(&title) {
+                    entry.ai_titles.push(title.clone());
+                }
+                entry.ai_title = title;
+            }
+            return;
+        }
+        Some("custom-title") => {
+            if let Some(title) = text("customTitle") {
+                entry.custom_title = title;
+            }
+            return;
+        }
+        Some("user" | "assistant") => {}
+        _ => return,
     }
     if object.get("isSidechain").and_then(Value::as_bool) == Some(true) {
         return;
@@ -300,12 +342,28 @@ pub fn current() -> Arc<Index> {
     index
 }
 
-/// Builds the index in the background shortly after launch, so the first
-/// search doesn't wait for it.
-pub fn warm_up() {
-    std::thread::spawn(|| {
+/// Keeps the index fresh in the background, so searches don't wait for
+/// it, and hands each new version to `changed` on the GTK thread.
+pub fn watch(changed: impl Fn(Arc<Index>) + 'static) {
+    let (tx, rx) = async_channel::bounded::<Arc<Index>>(1);
+    std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(5));
-        current();
+        let mut last: Option<Arc<Index>> = None;
+        loop {
+            let index = current();
+            if last.as_ref().is_none_or(|l| !Arc::ptr_eq(l, &index)) {
+                if tx.send_blocking(index.clone()).is_err() {
+                    return;
+                }
+                last = Some(index);
+            }
+            std::thread::sleep(std::time::Duration::from_secs(20));
+        }
+    });
+    glib::spawn_future_local(async move {
+        while let Ok(index) = rx.recv().await {
+            changed(index);
+        }
     });
 }
 
@@ -592,6 +650,25 @@ mod tests {
         ]);
         let order: Vec<usize> = index.search("expo", 10).iter().map(|h| h.entry).collect();
         assert_eq!(order, vec![1, 0]);
+    }
+
+    #[test]
+    fn titles() {
+        let mut entry = Entry::default();
+        for line in [
+            r#"{"type":"ai-title","aiTitle":"Şimdi kanka"}"#,
+            r#"{"type":"ai-title","aiTitle":"Expo'ya geçiş"}"#,
+            r#"{"type":"ai-title","aiTitle":"Şimdi kanka"}"#,
+        ] {
+            read_line(&mut entry, line);
+        }
+        assert_eq!(entry.title(), "Şimdi kanka");
+        assert_eq!(entry.ai_titles, ["Şimdi kanka", "Expo'ya geçiş"]);
+        read_line(
+            &mut entry,
+            r#"{"type":"custom-title","customTitle":"Belgesel"}"#,
+        );
+        assert_eq!(entry.title(), "Belgesel");
     }
 
     #[test]
