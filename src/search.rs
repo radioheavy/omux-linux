@@ -489,7 +489,6 @@ fn run_claude(prompt: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write as _;
 
     fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("omux-search-{name}-{}", std::process::id()));
