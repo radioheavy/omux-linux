@@ -115,6 +115,10 @@ impl Sidebar {
         view.append(Some("Previous Session"), Some("app.prev-session"));
         section.append_submenu(Some("View"), &view);
         section.append(Some("Jump to Session…"), Some("app.quick-switch"));
+        section.append(
+            Some("Import Claude Code Conversations"),
+            Some("app.import-claude"),
+        );
         section.append(Some("Settings"), Some("app.settings"));
         section.append(Some("Keyboard Shortcuts"), Some("app.shortcuts"));
         section.append(Some("Welcome to omux…"), Some("app.welcome"));
@@ -829,6 +833,10 @@ fn empty_menu() -> gio::Menu {
     top.append(Some("New Project"), Some("app.new-project"));
     top.append(Some("Open Folder as Project…"), Some("app.open-folder"));
     top.append(Some("Open Recent Conversation…"), Some("app.open-recent"));
+    top.append(
+        Some("Import Claude Code Conversations"),
+        Some("app.import-claude"),
+    );
     top.append(Some("New Codex Session"), Some("app.new-codex"));
     menu.append_section(None, &top);
     let bottom = gio::Menu::new();

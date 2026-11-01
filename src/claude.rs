@@ -74,7 +74,16 @@ impl RecentSession {
 
 /// The 300 most recently modified conversations that start with a real prompt.
 pub fn recent_sessions() -> Vec<RecentSession> {
-    let mut files: Vec<(PathBuf, SystemTime)> = project_dirs()
+    sessions_in(&project_dirs(), Some(300))
+}
+
+/// Every conversation that starts with a real prompt, newest first.
+pub fn all_sessions() -> Vec<RecentSession> {
+    sessions_in(&project_dirs(), None)
+}
+
+fn sessions_in(dirs: &[PathBuf], limit: Option<usize>) -> Vec<RecentSession> {
+    let mut files: Vec<(PathBuf, SystemTime)> = dirs
         .iter()
         .filter_map(|dir| std::fs::read_dir(dir).ok())
         .flat_map(|entries| entries.flatten())
@@ -86,7 +95,9 @@ pub fn recent_sessions() -> Vec<RecentSession> {
         })
         .collect();
     files.sort_by_key(|a| std::cmp::Reverse(a.1));
-    files.truncate(300);
+    if let Some(limit) = limit {
+        files.truncate(limit);
+    }
     files
         .into_iter()
         .filter_map(|(path, date)| {

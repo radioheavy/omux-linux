@@ -32,6 +32,8 @@ pub struct Settings {
     pub notify_style: String,
     pub notify_sound: String,
     pub welcomed: bool,
+    /// Existing Claude Code conversations were added once (Linux only).
+    pub imported_claude_conversations: bool,
 }
 
 impl Default for Settings {
@@ -55,6 +57,7 @@ impl Default for Settings {
             notify_style: "banner".into(),
             notify_sound: "Default".into(),
             welcomed: false,
+            imported_claude_conversations: false,
         }
     }
 }

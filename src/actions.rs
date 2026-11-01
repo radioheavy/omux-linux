@@ -244,6 +244,7 @@ pub fn install(app: &Rc<App>) {
     // App
     add(app, "settings", crate::ui::settings_dialog::present);
     add(app, "welcome", crate::ui::welcome::present);
+    add(app, "import-claude", crate::import::run_and_report);
     add(app, "github", |app| {
         app.open_uri("https://github.com/radioheavy/omux-linux")
     });

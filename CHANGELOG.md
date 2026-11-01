@@ -1,5 +1,9 @@
 # Changelog (Linux)
 
+## 0.2.0
+
+- **Your Claude Code conversations are already there.** At the first launch, omux adds every Claude Code conversation on the computer to the sidebar: one project per folder, newest first. The new projects start collapsed. Nothing runs until you select a session, and selecting one continues its conversation. Main menu › Import Claude Code Conversations adds conversations started since then.
+
 ## 0.1.0
 
 First Linux release. It covers the features of omux 0.6.1 for macOS:

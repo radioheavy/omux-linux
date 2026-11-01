@@ -4,6 +4,7 @@ mod claude;
 mod codex;
 mod codex_client;
 mod git;
+mod import;
 mod mentions;
 mod model;
 mod notify;

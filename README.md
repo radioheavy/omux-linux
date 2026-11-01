@@ -48,7 +48,12 @@ sudo apt install ./omux_<version>_amd64.deb                          # system-wi
 tar xzf omux-linux-x86_64.tar.gz && omux-linux-x86_64/install.sh     # ~/.local, no root
 ```
 
-omux then appears in the app grid. Ways to open a folder in it:
+omux then appears in the app grid. At the first launch it adds your existing
+Claude Code conversations to the sidebar, one project per folder. Nothing
+runs until you select a session, which then continues its conversation. Main
+menu › Import Claude Code Conversations adds newer ones later.
+
+Ways to open a folder in it:
 
 - Files › Open With › omux
 - `omux <folder>` (the folder opens in the running instance)

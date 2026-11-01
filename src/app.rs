@@ -100,6 +100,8 @@ impl App {
         if auto_resume {
             app.start_all_sessions(selection);
         }
+        // After the auto-resume pass, so imported sessions wait to be selected.
+        crate::import::first_launch(&app);
         app.refresh_all();
 
         let welcomed = app.settings.borrow().welcomed;
