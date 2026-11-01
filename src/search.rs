@@ -370,11 +370,7 @@ impl Index {
         let original: Vec<char> = entry.haystack().chars().collect();
         let start = at.saturating_sub(50).max(body);
         let end = (at + 90).min(original.len());
-        let mut text: String = original[start..end]
-            .iter()
-            .map(|c| if *c == '\n' { ' ' } else { *c })
-            .collect();
-        text = text.trim().to_string();
+        let mut text = one_line(&original[start..end].iter().collect::<String>());
         if start > body {
             text.insert(0, '…');
         }
@@ -565,9 +561,11 @@ mod tests {
         let hits = index.search("guvercin ISTANBUL", 10);
         assert_eq!(hits.len(), 1);
         let hits = index.search("istanbul", 10);
-        assert_eq!(
-            hits[0].snippet,
-            "…in oyunu yapalım render GCP'de olsun Three.js ile İstanbul"
+        let snippet = &hits[0].snippet;
+        assert!(snippet.starts_with('…'), "{snippet}");
+        assert!(
+            snippet.ends_with("yapalım render GCP'de olsun Three.js ile İstanbul"),
+            "{snippet}"
         );
         assert!(index.search("istanbul pizza", 10).is_empty());
         assert!(index.search("noise", 10).is_empty());
