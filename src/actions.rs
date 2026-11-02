@@ -40,6 +40,7 @@ pub const SHORTCUTS: &[(&str, &[&str], &str)] = &[
     ("app.panel-tab::files", &["<Control><Alt>1"], "Files"),
     ("app.panel-tab::changes", &["<Control><Alt>2"], "Changes"),
     ("app.panel-tab::browser", &["<Control><Alt>3"], "Browser"),
+    ("app.panel-tab::activity", &["<Control><Alt>4"], "Activity"),
     ("app.rename", &["F2"], "Rename session"),
     ("app.edit-session", &["<Control><Alt>e"], "Edit session"),
     ("app.restart", &["<Control><Shift>r"], "Restart session"),

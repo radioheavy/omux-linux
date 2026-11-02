@@ -3,7 +3,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+
 use std::rc::Rc;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
@@ -13,7 +13,7 @@ use gtk::glib;
 use uuid::Uuid;
 
 use crate::app::App;
-use crate::claude::{AgentScanner, JsonlReader, SubAgent, TranscriptEvent};
+use crate::claude::{AgentScanner, SubAgent, TranscriptEvent};
 use crate::i18n::tr;
 use crate::model::SessionProvider;
 use crate::term::status::State;
@@ -382,8 +382,12 @@ struct Entry {
     error: bool,
 }
 
-/// A subagent's transcript, re-read every 1.5 s while it's on screen.
-pub fn transcript_view(path: PathBuf) -> gtk::Widget {
+/// A subagent's transcript, re-read every 1.5 s while it's on screen:
+/// `read` returns its new rows on each call (on a worker thread), from this
+/// computer or an SSH host.
+pub fn transcript_view_from(
+    read: impl FnMut() -> Vec<serde_json::Value> + Send + 'static,
+) -> gtk::Widget {
     let list = gtk::Box::new(gtk::Orientation::Vertical, 10);
     list.set_margin_start(14);
     list.set_margin_end(14);
@@ -396,7 +400,7 @@ pub fn transcript_view(path: PathBuf) -> gtk::Widget {
         .build();
     // The file is read on a worker thread; a large transcript would
     // otherwise stall the UI every 1.5 s.
-    let reader = Arc::new(Mutex::new(JsonlReader::default()));
+    let reader = Arc::new(Mutex::new(read));
     let entries: Rc<RefCell<Vec<Entry>>> = Rc::default();
     let tools: Rc<RefCell<HashMap<String, usize>>> = Rc::default();
     let loading = Rc::new(Cell::new(false));
@@ -407,7 +411,7 @@ pub fn transcript_view(path: PathBuf) -> gtk::Widget {
             if loading.replace(true) {
                 return;
             }
-            let (reader, path) = (reader.clone(), path.clone());
+            let reader = reader.clone();
             let (list, scroller, entries, tools, loading) = (
                 list.clone(),
                 scroller.clone(),
@@ -416,7 +420,7 @@ pub fn transcript_view(path: PathBuf) -> gtk::Widget {
                 loading.clone(),
             );
             crate::ui::panel::background(
-                move || reader.lock().map(|mut r| r.read(&path)).unwrap_or_default(),
+                move || reader.lock().map(|mut read| read()).unwrap_or_default(),
                 move |objects| {
                     loading.set(false);
                     let mut entries = entries.borrow_mut();

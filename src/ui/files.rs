@@ -14,7 +14,6 @@ use uuid::Uuid;
 use vte::prelude::*;
 
 use crate::app::App;
-use crate::claude::SubAgent;
 use crate::i18n::tr;
 
 /// Names never listed, as on the Mac.
@@ -621,31 +620,6 @@ pub fn preview(app: &Rc<App>, path: &Path) {
     with(|f| f.selected = Some(path.to_path_buf()));
     let wrap = app.settings.borrow().preview_wrap_lines;
     set_preview(&crate::ui::preview::view(app, path, wrap));
-}
-
-pub fn show_transcript(_app: &Rc<App>, agent: &SubAgent) {
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    let header = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-    header.set_margin_start(10);
-    header.set_margin_end(6);
-    header.set_margin_top(4);
-    header.set_margin_bottom(4);
-    let title = gtk::Label::new(Some(&format!("{} · {}", agent.kind, agent.description)));
-    title.add_css_class("omux-header-name");
-    title.set_ellipsize(gtk::pango::EllipsizeMode::End);
-    title.set_hexpand(true);
-    title.set_xalign(0.0);
-    header.append(&title);
-    let close = gtk::Button::from_icon_name("window-close-symbolic");
-    close.add_css_class("flat");
-    close.add_css_class("omux-small");
-    close.connect_clicked(|_| set_preview(&placeholder()));
-    header.append(&close);
-    vbox.append(&header);
-    vbox.append(&crate::ui::agents::transcript_view(
-        agent.transcript.clone(),
-    ));
-    set_preview(&vbox);
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 mod actions;
+mod activity;
 mod app;
 mod claude;
 mod codex;

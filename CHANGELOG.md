@@ -2,6 +2,8 @@
 
 ## 0.12.0
 
+- **Activity tab.** The right panel's new Activity tab (Ctrl+Alt+4) shows what the selected Claude Code session runs in the background, live: its subagents and the shell commands it started in the background, running ones first. It follows the newest one until you pick another; below the list, a subagent's transcript or a shell's output streams as it's written. Clicking a subagent in the sidebar opens it here.
+  - Works for remote projects too: omux reads the session's files on the SSH host over one shared connection.
 - **Turkish.** The whole interface is in Turkish when the system language is Turkish. Settings › Appearance › Language picks System Language, English or Türkçe; it applies the next time omux opens.
 - **Every session has its own color.** A session gets a color when it's created, the least used one so neighbors differ, and keeps it. The color fills its row in the sidebar; right-click › Color changes it. The dot now shows only the status (working, needs you, done).
 

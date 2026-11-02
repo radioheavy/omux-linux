@@ -158,6 +158,7 @@ impl Sidebar {
         view.append(Some(tr("Files")), Some("app.panel-tab::files"));
         view.append(Some(tr("Changes")), Some("app.panel-tab::changes"));
         view.append(Some(tr("Browser")), Some("app.panel-tab::browser"));
+        view.append(Some(tr("Activity")), Some("app.panel-tab::activity"));
         view.append(Some(tr("Next Session")), Some("app.next-session"));
         view.append(Some(tr("Previous Session")), Some("app.prev-session"));
         section.append_submenu(Some(tr("View")), &view);

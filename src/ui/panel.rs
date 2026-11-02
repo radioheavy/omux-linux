@@ -1,4 +1,5 @@
-//! The right panel: Files, Changes and Browser tabs for the selected session.
+//! The right panel: Files, Changes, Browser and Activity tabs for the
+//! selected session.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -12,10 +13,11 @@ use crate::app::App;
 use crate::claude::SubAgent;
 use crate::i18n::tr;
 
-pub const TABS: [(&str, &str); 3] = [
+pub const TABS: [(&str, &str); 4] = [
     ("files", "Files"),
     ("changes", "Changes"),
     ("browser", "Browser"),
+    ("activity", "Activity"),
 ];
 
 struct Panel {
@@ -46,6 +48,7 @@ pub fn build(app: &Rc<App>) {
         let icon = match key {
             "files" => gtk::Image::from_icon_name("text-x-generic-symbolic"),
             "changes" => gtk::Image::from_icon_name("list-add-symbolic"),
+            "activity" => gtk::Image::from_icon_name("utilities-system-monitor-symbolic"),
             _ => gtk::Image::from_icon_name("web-browser-symbolic"),
         };
         icon.set_pixel_size(12);
@@ -80,6 +83,7 @@ pub fn build(app: &Rc<App>) {
     stack.add_named(&crate::ui::files::build(app), Some("files"));
     stack.add_named(&crate::ui::changes::build(app), Some("changes"));
     stack.add_named(&crate::ui::browser::build(app), Some("browser"));
+    stack.add_named(&crate::ui::activity::build(app), Some("activity"));
 
     app.ui.panel.append(&strip);
     app.ui.panel.append(&hairline);
@@ -163,6 +167,7 @@ pub fn selection_changed(app: &Rc<App>) {
     }
     crate::ui::files::selection_changed(app);
     crate::ui::browser::selection_changed(app);
+    crate::ui::activity::selection_changed(app);
 }
 
 pub fn session_closed(app: &Rc<App>, id: Uuid) {
@@ -183,8 +188,7 @@ pub fn preview_file(app: &Rc<App>, path: &Path) {
 pub fn show_transcript(id: Uuid, agent: &SubAgent) {
     let app = crate::ui::files::app();
     if let Some(app) = app.filter(|a| a.selected.get() == Some(id)) {
-        show_tab(&app, "files");
-        crate::ui::files::show_transcript(&app, agent);
+        crate::ui::activity::focus_agent(&app, &agent.id);
     }
 }
 

@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod agents;
 pub mod browser;
 pub mod changes;
