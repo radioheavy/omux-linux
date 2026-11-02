@@ -336,7 +336,10 @@ impl App {
     }
 
     fn remove_terminal(&self, id: Uuid) {
-        if let Some(terminal) = self.terminals.borrow_mut().remove(&id) {
+        // Release the borrow first: disposing can report the exit, and the
+        // handler looks the terminal up again.
+        let removed = self.terminals.borrow_mut().remove(&id);
+        if let Some(terminal) = removed {
             terminal.dispose();
             self.ui.remove_terminal(&terminal);
         }

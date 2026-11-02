@@ -1,5 +1,9 @@
 # Changelog (Linux)
 
+## 0.10.1
+
+- **Fixed a crash when a session closed.** Closing, stopping or idle-closing a session could quit omux.
+
 ## 0.10.0
 
 - **Machine tabs.** With a remote project, tabs at the top of the sidebar switch between All, Local and each SSH host. All lists both, and remote projects carry a "☁ host" sticker (on each row in the latest-first list).
