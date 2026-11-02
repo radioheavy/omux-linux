@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use crate::i18n::tr;
 use crate::model::SessionProvider;
 use crate::persistence::abbreviate_home;
 use crate::term::status::{Record, State};
@@ -65,27 +66,27 @@ impl TabRuntime {
         match self.status_state {
             Some(State::Blocked) => {
                 return match detail.or(self.status_kind.as_deref()) {
-                    Some(why) => format!("Needs you · {why}"),
-                    None => "Needs you".into(),
+                    Some(why) => crate::trf!("Needs you · {why}", why = why),
+                    None => tr("Needs you").into(),
                 }
             }
             Some(State::Working) => {
                 return match detail {
-                    Some(d) => format!("Working · {d}"),
-                    None => "Working…".into(),
+                    Some(d) => crate::trf!("Working · {d}", d = d),
+                    None => tr("Working…").into(),
                 }
             }
-            Some(State::Done) => return "Done".into(),
+            Some(State::Done) => return tr("Done").into(),
             Some(State::Error) => {
                 return match detail {
-                    Some(d) => format!("Error · {d}"),
-                    None => "Error".into(),
+                    Some(d) => crate::trf!("Error · {d}", d = d),
+                    None => tr("Error").into(),
                 }
             }
             Some(State::Idle) | None => {}
         }
         if self.exited {
-            return "Stopped".into();
+            return tr("Stopped").into();
         }
         if !self.title.is_empty() {
             return self.title.clone();

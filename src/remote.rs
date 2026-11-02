@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::claude::RecentSession;
+use crate::i18n::tr;
 use crate::model::{TabGroup, TabItem};
 use crate::runtime::TabRuntime;
 
@@ -107,15 +108,15 @@ pub fn new_project(app: &Rc<App>) {
          The host needs dtach and Claude Code. Use a name from ~/.ssh/config, or user@address.",
     ));
     let host = adw::EntryRow::new();
-    host.set_title("SSH host");
+    host.set_title(tr("SSH host"));
     host.set_text(&last_host(app));
     group.add(&host);
     let folder = adw::EntryRow::new();
-    folder.set_title("Folder on the host");
+    folder.set_title(tr("Folder on the host"));
     folder.set_text("~/");
     group.add(&folder);
     let name = adw::EntryRow::new();
-    name.set_title("Name (optional)");
+    name.set_title(tr("Name (optional)"));
     group.add(&name);
     page.add(&group);
 
@@ -151,7 +152,7 @@ pub fn new_project(app: &Rc<App>) {
 }
 
 fn add_project(app: &Rc<App>, host: &str, dir: &str, name: &str) {
-    let tab = TabItem::new("Session 1");
+    let tab = TabItem::new(tr("Session 1"));
     let id = tab.id;
     let mut group = TabGroup::new(name, Some(dir.to_string()), vec![tab]);
     group.ssh_host = Some(host.to_string());
@@ -297,9 +298,14 @@ pub fn import(app: &Rc<App>, host: &str, report: bool) {
                 let (added, _) = crate::import::add(&app, planned, Some(&host));
                 if report {
                     let body = match added {
-                        0 => format!("Every conversation on {host} already has a session."),
-                        1 => format!("Added 1 conversation from {host}."),
-                        n => format!("Added {n} conversations from {host}."),
+                        0 => crate::trf!(
+                            "Every conversation on {host} already has a session.",
+                            host = host
+                        ),
+                        1 => crate::trf!("Added 1 conversation from {host}.", host = host),
+                        n => {
+                            crate::trf!("Added {n} conversations from {host}.", n = n, host = host)
+                        }
                     };
                     crate::ui::dialogs::info(&app, "Conversations on the Server", &body);
                 }

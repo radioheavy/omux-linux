@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::git;
+use crate::i18n::tr;
 use crate::model::{SessionProvider, Worktree};
 use crate::pulls::{self, CheckResult, Fetch, PrState, PullRequest};
 use crate::ui::panel::background;
@@ -50,23 +51,28 @@ pub fn menu_section(app: &Rc<App>, id: Uuid) -> Option<gio::Menu> {
     let menu = gio::Menu::new();
     match pull(id) {
         Some(pr) if pr.state == PrState::Merged => {
-            item(&menu, "Delete Merged Worktree…", "app.wt-cleanup", id)
+            item(&menu, tr("Delete Merged Worktree…"), "app.wt-cleanup", id)
         }
         Some(pr) if pr.state == PrState::Open => item(
             &menu,
-            &format!("Open Pull Request #{}", pr.number),
+            &crate::trf!("Open Pull Request #{n}", n = pr.number),
             "app.wt-open-pr",
             id,
         ),
-        _ => item(&menu, "Create Pull Request…", "app.wt-pr", id),
+        _ => item(&menu, tr("Create Pull Request…"), "app.wt-pr", id),
     }
     item(
         &menu,
-        &format!("Merge into {}", worktree.base),
+        &crate::trf!("Merge into {base}", base = worktree.base),
         "app.wt-merge",
         id,
     );
-    item(&menu, "Open Worktree in Files", "app.wt-open-folder", id);
+    item(
+        &menu,
+        tr("Open Worktree in Files"),
+        "app.wt-open-folder",
+        id,
+    );
     Some(menu)
 }
 
@@ -218,9 +224,9 @@ pub fn request_close(app: &Rc<App>, id: Uuid) {
                     merged,
                 )),
             );
-            dialog.add_response("cancel", "Cancel");
-            dialog.add_response("keep", "Keep Worktree");
-            dialog.add_response("delete", "Delete Worktree and Branch");
+            dialog.add_response("cancel", tr("Cancel"));
+            dialog.add_response("keep", tr("Keep Worktree"));
+            dialog.add_response("delete", tr("Delete Worktree and Branch"));
             dialog.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
             dialog.set_default_response(Some("keep"));
             dialog.set_close_response("cancel");
@@ -259,7 +265,7 @@ fn delete_worktree(app: &Rc<App>, id: Uuid) {
             move || git::remove_worktree(&repo, &dir, &branch),
             move |result| {
                 if let (Err(err), Some(app)) = (result, weak.upgrade()) {
-                    alert(&app, "Couldn't delete the worktree", &err);
+                    alert(&app, tr("Couldn't delete the worktree"), &err);
                 }
             },
         );
@@ -270,7 +276,7 @@ fn delete_worktree(app: &Rc<App>, id: Uuid) {
             Ok(()) => remove(),
             Err(err) => {
                 if let Some(app) = weak.upgrade() {
-                    alert(&app, "Couldn't stop the Codex session", &err);
+                    alert(&app, tr("Couldn't stop the Codex session"), &err);
                 }
             }
         });
@@ -293,8 +299,8 @@ fn clean_up_merged(app: &Rc<App>, id: Uuid) {
                 Some(&git::cleanup_title(&name)),
                 Some(&git::cleanup_text(&worktree.branch, number, dirty)),
             );
-            dialog.add_response("cancel", "Cancel");
-            dialog.add_response("delete", "Delete Worktree and Branch");
+            dialog.add_response("cancel", tr("Cancel"));
+            dialog.add_response("delete", tr("Delete Worktree and Branch"));
             dialog.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
             dialog.set_close_response("cancel");
             let weak = Rc::downgrade(&app);
@@ -329,12 +335,12 @@ fn commit_if_needed(app: &Rc<App>, id: Uuid, next: impl FnOnce(Rc<App>) + 'stati
                 Some(&git::commit_text(&worktree.branch)),
             );
             let entry = gtk::Entry::new();
-            entry.set_placeholder_text(Some("Commit message"));
+            entry.set_placeholder_text(Some(tr("Commit message")));
             entry.set_text(&name);
             entry.set_activates_default(true);
             dialog.set_extra_child(Some(&entry));
-            dialog.add_response("cancel", "Cancel");
-            dialog.add_response("commit", "Commit");
+            dialog.add_response("cancel", tr("Cancel"));
+            dialog.add_response("commit", tr("Commit"));
             dialog.set_response_appearance("commit", adw::ResponseAppearance::Suggested);
             dialog.set_default_response(Some("commit"));
             dialog.set_close_response("cancel");
@@ -355,7 +361,7 @@ fn commit_if_needed(app: &Rc<App>, id: Uuid, next: impl FnOnce(Rc<App>) + 'stati
                         let Some(app) = weak.upgrade() else { return };
                         match result {
                             Ok(()) => next(app),
-                            Err(err) => alert(&app, "Couldn't commit", &err),
+                            Err(err) => alert(&app, tr("Couldn't commit"), &err),
                         }
                     },
                 );
@@ -372,7 +378,10 @@ pub fn create_pull_request(app: &Rc<App>, id: Uuid) {
             return;
         };
         let branch = worktree.branch.clone();
-        crate::ui::changes::set_activity(id, Some(format!("Pushing {branch}…")));
+        crate::ui::changes::set_activity(
+            id,
+            Some(crate::trf!("Pushing {branch}…", branch = branch)),
+        );
         let weak = Rc::downgrade(&app);
         background(
             move || {
@@ -390,10 +399,14 @@ pub fn create_pull_request(app: &Rc<App>, id: Uuid) {
                     Ok(Some(url)) => app.open_uri(&url),
                     Ok(None) => alert(
                         &app,
-                        &format!("Pushed “{branch}”"),
-                        "The remote isn't on GitHub, so open the pull request on your host.",
+                        &crate::trf!("Pushed “{branch}”", branch = branch),
+                        tr("The remote isn't on GitHub, so open the pull request on your host."),
                     ),
-                    Err(err) => alert(&app, &format!("Couldn't push “{branch}”"), &err),
+                    Err(err) => alert(
+                        &app,
+                        &crate::trf!("Couldn't push “{branch}”", branch = branch),
+                        &err,
+                    ),
                 }
             },
         );
@@ -406,7 +419,10 @@ pub fn merge(app: &Rc<App>, id: Uuid) {
             return;
         };
         let (base, branch) = (worktree.base.clone(), worktree.branch.clone());
-        crate::ui::changes::set_activity(id, Some(format!("Merging into {base}…")));
+        crate::ui::changes::set_activity(
+            id,
+            Some(crate::trf!("Merging into {base}…", base = base)),
+        );
         let weak = Rc::downgrade(&app);
         background(
             move || git::merge(Path::new(&worktree.repo), &worktree.base, &worktree.branch),
@@ -414,8 +430,20 @@ pub fn merge(app: &Rc<App>, id: Uuid) {
                 crate::ui::changes::set_activity(id, None);
                 let Some(app) = weak.upgrade() else { return };
                 match result {
-                    Ok(output) => alert(&app, &format!("Merged “{branch}” into “{base}”"), &output),
-                    Err(err) => alert(&app, &format!("Couldn't merge “{branch}”"), &err),
+                    Ok(output) => alert(
+                        &app,
+                        &crate::trf!(
+                            "Merged “{branch}” into “{base}”",
+                            branch = branch,
+                            base = base
+                        ),
+                        &output,
+                    ),
+                    Err(err) => alert(
+                        &app,
+                        &crate::trf!("Couldn't merge “{branch}”", branch = branch),
+                        &err,
+                    ),
                 }
             },
         );
@@ -447,11 +475,11 @@ pub fn sidebar_extras(app: &App, id: Uuid, container: &gtk::Box) {
     badge.set_tooltip_text(Some(&format!("#{} · {}", pr.number, pr.summary())));
     row.append(&badge);
     if pr.state == PrState::Merged {
-        let delete = gtk::Button::with_label("Delete Worktree");
+        let delete = gtk::Button::with_label(tr("Delete Worktree"));
         delete.add_css_class("omux-small");
-        delete.set_tooltip_text(Some(
+        delete.set_tooltip_text(Some(tr(
             "The pull request was merged. Close this session and delete its worktree and branch.",
-        ));
+        )));
         delete.set_action_name(Some("app.wt-cleanup"));
         delete.set_action_target_value(Some(&id.to_string().to_variant()));
         row.append(&delete);
@@ -491,9 +519,10 @@ pub fn header_chips(app: &App, id: Uuid, container: &gtk::Box) {
     let branch = gtk::Button::new();
     branch.set_child(Some(&content));
     branch.add_css_class("flat");
-    branch.set_tooltip_text(Some(&format!(
-        "Changes on {} since {} (Ctrl+Alt+2)",
-        worktree.branch, worktree.base
+    branch.set_tooltip_text(Some(&crate::trf!(
+        "Changes on {branch} since {base} (Ctrl+Alt+2)",
+        branch = worktree.branch,
+        base = worktree.base
     )));
     branch.set_action_name(Some("app.panel-tab"));
     branch.set_action_target_value(Some(&"changes".to_variant()));
@@ -518,7 +547,7 @@ fn pr_popover(id: Uuid, pr: &PullRequest) -> gtk::Popover {
     facts.set_xalign(0.0);
     vbox.append(&facts);
     if pr.checks.is_empty() {
-        let none = gtk::Label::new(Some("No checks"));
+        let none = gtk::Label::new(Some(tr("No checks")));
         none.add_css_class("omux-status");
         none.set_xalign(0.0);
         vbox.append(&none);
@@ -558,7 +587,7 @@ fn pr_popover(id: Uuid, pr: &PullRequest) -> gtk::Popover {
         vbox.append(&scroller);
     }
     let popover = gtk::Popover::new();
-    let open = gtk::Button::with_label("Open on GitHub");
+    let open = gtk::Button::with_label(tr("Open on GitHub"));
     let url = pr.url.clone();
     let pop = popover.downgrade();
     open.connect_clicked(move |_| {
@@ -569,7 +598,7 @@ fn pr_popover(id: Uuid, pr: &PullRequest) -> gtk::Popover {
     });
     vbox.append(&open);
     if pr.state == PrState::Merged {
-        let delete = gtk::Button::with_label("Delete Worktree and Branch…");
+        let delete = gtk::Button::with_label(tr("Delete Worktree and Branch…"));
         delete.add_css_class("destructive-action");
         delete.set_action_name(Some("app.wt-cleanup"));
         delete.set_action_target_value(Some(&id.to_string().to_variant()));
@@ -599,16 +628,20 @@ pub fn changes_footer(app: &Rc<App>, id: Uuid, activity: Option<String>) -> Opti
         return Some(hbox.upcast());
     }
     let menu = gio::Menu::new();
-    let item = gio::MenuItem::new(Some(&format!("Merge into {}", worktree.base)), None);
+    let item = gio::MenuItem::new(
+        Some(&crate::trf!("Merge into {base}", base = worktree.base)),
+        None,
+    );
     item.set_action_and_target_value(Some("app.wt-merge"), Some(&id.to_string().to_variant()));
     menu.append_item(&item);
     let button = adw::SplitButton::new();
-    button.set_label("Create PR");
+    button.set_label(tr("Create PR"));
     button.set_menu_model(Some(&menu));
     button.add_css_class("omux-small");
-    button.set_tooltip_text(Some(&format!(
-        "Push {} and open a pull request into {}",
-        worktree.branch, worktree.base
+    button.set_tooltip_text(Some(&crate::trf!(
+        "Push {branch} and open a pull request into {base}",
+        branch = worktree.branch,
+        base = worktree.base
     )));
     button.set_action_name(Some("app.wt-pr"));
     button.set_action_target_value(Some(&id.to_string().to_variant()));

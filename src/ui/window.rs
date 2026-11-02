@@ -9,6 +9,7 @@ use uuid::Uuid;
 use super::header::Header;
 use super::sidebar::Sidebar;
 use crate::app::App;
+use crate::i18n::tr;
 use crate::term::SessionTerminal;
 
 pub struct Ui {
@@ -29,8 +30,8 @@ impl Ui {
         stack.set_hexpand(true);
         stack.set_vexpand(true);
         let empty = adw::StatusPage::builder()
-            .title("No session")
-            .description("Press Ctrl+Shift+T to start one.")
+            .title(tr("No session"))
+            .description(tr("Press Ctrl+Shift+T to start one."))
             .icon_name("utilities-terminal-symbolic")
             .build();
         empty.add_css_class("omux-terminal-bg");
@@ -168,18 +169,19 @@ pub fn confirm_quit(app: &Rc<App>, window: &adw::ApplicationWindow) -> bool {
         return false;
     }
     let text = if running == 1 {
-        "1 session is running.".to_string()
+        tr("1 session is running.").to_string()
     } else {
-        format!("{running} sessions are running.")
+        crate::trf!("{running} sessions are running.", running = running)
     };
     let dialog = adw::AlertDialog::new(
-        Some("Quit omux?"),
-        Some(&format!(
-            "{text} Agent conversation IDs are saved so you can continue them next launch."
+        Some(tr("Quit omux?")),
+        Some(&crate::trf!(
+            "{text} Agent conversation IDs are saved so you can continue them next launch.",
+            text = text
         )),
     );
-    dialog.add_response("cancel", "Cancel");
-    dialog.add_response("quit", "Quit");
+    dialog.add_response("cancel", tr("Cancel"));
+    dialog.add_response("quit", tr("Quit"));
     dialog.set_response_appearance("quit", adw::ResponseAppearance::Destructive);
     dialog.set_default_response(Some("quit"));
     dialog.set_close_response("cancel");

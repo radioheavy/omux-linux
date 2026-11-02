@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::claude::{AgentScanner, JsonlReader, SubAgent, TranscriptEvent};
+use crate::i18n::tr;
 use crate::model::SessionProvider;
 use crate::term::status::State;
 
@@ -226,9 +227,9 @@ pub fn update_sidebar(app: &App, id: Uuid, container: &gtk::Box) {
     }
     if list.len() > 3 {
         let toggle = gtk::Button::with_label(&if expanded {
-            "Show less".to_string()
+            tr("Show less").to_string()
         } else {
-            format!("+{} more", list.len() - 3)
+            crate::trf!("+{n} more", n = list.len() - 3)
         });
         toggle.add_css_class("flat");
         toggle.add_css_class("omux-small");
@@ -262,9 +263,9 @@ pub fn update_header(app: &App, id: Uuid, container: &gtk::Box) {
         }
         let running = list.iter().filter(|a| !a.finished).count();
         let text = match running {
-            0 => "agents done".to_string(),
-            1 => "1 agent".to_string(),
-            n => format!("{n} agents"),
+            0 => tr("agents done").to_string(),
+            1 => tr("1 agent").to_string(),
+            n => crate::trf!("{n} agents", n = n),
         };
         let label = gtk::Label::new(Some(&text));
         label.add_css_class("omux-status");
@@ -272,7 +273,7 @@ pub fn update_header(app: &App, id: Uuid, container: &gtk::Box) {
         pill.append(&label);
         let button = gtk::MenuButton::builder()
             .child(&pill)
-            .tooltip_text("Subagents in this session")
+            .tooltip_text(tr("Subagents in this session"))
             .build();
         button.add_css_class("flat");
         button.add_css_class("omux-pill");
@@ -309,9 +310,10 @@ fn agent_list(id: Uuid) -> gtk::Popover {
     vbox.set_margin_top(10);
     vbox.set_margin_bottom(10);
     let title = gtk::Label::new(None);
-    title.set_markup(&format!(
-        "<b>Agents</b>  <span alpha=\"60%\">{running} running · {} done</span>",
-        list.len() - running
+    title.set_markup(&crate::trf!(
+        "<b>Agents</b>  <span alpha=\"60%\">{running} running · {done} done</span>",
+        running = running,
+        done = list.len() - running
     ));
     title.set_xalign(0.0);
     vbox.append(&title);
@@ -322,22 +324,25 @@ fn agent_list(id: Uuid) -> gtk::Popover {
         let row = adw::ActionRow::new();
         row.set_title(&glib::markup_escape_text(&agent.description));
         let state = if agent.blocked {
-            "Needs permission".to_string()
+            tr("Needs permission").to_string()
         } else if agent.finished {
-            "Done".to_string()
+            tr("Done").to_string()
         } else {
-            agent.activity.clone().unwrap_or_else(|| "starting".into())
+            agent
+                .activity
+                .clone()
+                .unwrap_or_else(|| tr("starting").into())
         };
         let mut subtitle = format!("{} · {state}", agent.kind);
         if agent.tool_count > 0 {
-            subtitle.push_str(&format!(
-                " · {} tool{}",
-                agent.tool_count,
-                if agent.tool_count == 1 { "" } else { "s" }
-            ));
+            subtitle.push_str(&if agent.tool_count == 1 {
+                tr(" · 1 tool").to_string()
+            } else {
+                crate::trf!(" · {n} tools", n = agent.tool_count)
+            });
         }
         if agent.background {
-            subtitle.push_str(" · background");
+            subtitle.push_str(tr(" · background"));
         }
         row.set_subtitle(&glib::markup_escape_text(&subtitle));
         row.add_prefix(&agent_dot(agent));
@@ -356,7 +361,7 @@ fn agent_list(id: Uuid) -> gtk::Popover {
         .propagate_natural_height(true)
         .build();
     vbox.append(&scroller);
-    let footer = gtk::Label::new(Some("Click an agent to open its transcript"));
+    let footer = gtk::Label::new(Some(tr("Click an agent to open its transcript")));
     footer.add_css_class("omux-status");
     vbox.append(&footer);
     let popover = gtk::Popover::new();
@@ -447,7 +452,7 @@ pub fn transcript_view(path: PathBuf) -> gtk::Widget {
                                     let first =
                                         text.trim().lines().next().unwrap_or("").to_string();
                                     let first = if first.is_empty() {
-                                        "Done".to_string()
+                                        tr("Done").to_string()
                                     } else {
                                         first
                                     };
@@ -494,7 +499,7 @@ fn render(list: &gtk::Box, entries: &[Entry]) {
                 let card = gtk::Box::new(gtk::Orientation::Vertical, 4);
                 card.add_css_class("card");
                 card.set_margin_bottom(4);
-                let title = gtk::Label::new(Some("TASK"));
+                let title = gtk::Label::new(Some(tr("TASK")));
                 title.add_css_class("caption-heading");
                 title.set_xalign(0.0);
                 title.set_margin_start(10);
@@ -530,7 +535,7 @@ fn render(list: &gtk::Box, entries: &[Entry]) {
                 vbox.append(&title);
                 let result = gtk::Label::new(Some(&format!(
                     "⎿  {}",
-                    entry.result.as_deref().unwrap_or("Running…")
+                    entry.result.as_deref().unwrap_or(tr("Running…"))
                 )));
                 result.add_css_class("omux-status");
                 result.add_css_class("omux-mono");

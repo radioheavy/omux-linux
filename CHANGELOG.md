@@ -2,6 +2,7 @@
 
 ## 0.12.0
 
+- **Turkish.** The whole interface is in Turkish when the system language is Turkish. Settings › Appearance › Language picks System Language, English or Türkçe; it applies the next time omux opens.
 - **Every session has its own color.** A session gets a color when it's created, the least used one so neighbors differ, and keeps it. The color fills its row in the sidebar; right-click › Color changes it. The dot now shows only the status (working, needs you, done).
 
 ## 0.11.0

@@ -14,6 +14,7 @@ use gtk::prelude::*;
 use serde_json::Value;
 
 use crate::app::App;
+use crate::i18n::tr;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Limit {
@@ -62,14 +63,14 @@ pub fn fetch_claude() -> Usage {
         Token::Found(token) => token,
         Token::NoLogin => {
             return Usage::Problem(
-                "No Claude login".into(),
-                "No Claude Code login found. Run claude, then /login with a Claude.ai plan. Click to check again.".into(),
+                tr("No Claude login").into(),
+                tr("No Claude Code login found. Run claude, then /login with a Claude.ai plan. Click to check again.").into(),
             )
         }
         Token::ApiKey => {
             return Usage::Problem(
-                "Needs a Claude.ai plan".into(),
-                "Claude Code is signed in with an API key. Usage limits exist only for Claude.ai plans (/login in claude). Click to check again.".into(),
+                tr("Needs a Claude.ai plan").into(),
+                tr("Claude Code is signed in with an API key. Usage limits exist only for Claude.ai plans (/login in claude). Click to check again.").into(),
             )
         }
     };
@@ -87,8 +88,11 @@ pub fn fetch_claude() -> Usage {
         Ok(response) => response,
         Err(err) => {
             return Usage::Problem(
-                "Usage unavailable".into(),
-                format!("Couldn't reach Anthropic's usage endpoint: {err}. Click to try again."),
+                tr("Usage unavailable").into(),
+                crate::trf!(
+                    "Couldn't reach Anthropic's usage endpoint: {err}. Click to try again.",
+                    err = err
+                ),
             )
         }
     };
@@ -96,14 +100,14 @@ pub fn fetch_claude() -> Usage {
         200 => {}
         401 | 403 => {
             return Usage::Problem(
-                "Claude login expired".into(),
-                "Claude Code's login no longer works. Run claude to sign in again, then click to check again.".into(),
+                tr("Claude login expired").into(),
+                tr("Claude Code's login no longer works. Run claude to sign in again, then click to check again.").into(),
             )
         }
         code => {
             return Usage::Problem(
-                "Usage unavailable".into(),
-                format!("Anthropic's usage endpoint answered {code}. Click to try again."),
+                tr("Usage unavailable").into(),
+                crate::trf!("Anthropic's usage endpoint answered {code}. Click to try again.", code = code),
             )
         }
     }
@@ -111,8 +115,8 @@ pub fn fetch_claude() -> Usage {
     match parse_claude(&body) {
         Some(limits) => Usage::Limits(limits),
         None => Usage::Problem(
-            "Usage unavailable".into(),
-            "Anthropic's usage endpoint answered in an unexpected format. Click to try again."
+            tr("Usage unavailable").into(),
+            tr("Anthropic's usage endpoint answered in an unexpected format. Click to try again.")
                 .into(),
         ),
     }
@@ -135,7 +139,7 @@ pub fn parse_claude(body: &str) -> Option<Vec<Limit>> {
                     .and_then(Value::as_str);
                 let label = match kind {
                     "session" => "5h".to_string(),
-                    "weekly_all" => "Week".to_string(),
+                    "weekly_all" => tr("Week").to_string(),
                     _ => model.unwrap_or(kind).to_string(),
                 };
                 let resets_at = item
@@ -170,11 +174,11 @@ pub fn resets_in(resets_at: i64) -> String {
         .unwrap_or(0);
     let seconds = (resets_at - now).max(0);
     if seconds >= 86_400 {
-        format!("{}d {}h", seconds / 86_400, seconds / 3600 % 24)
+        crate::trf!("{d}d {h}h", d = seconds / 86_400, h = seconds / 3600 % 24)
     } else if seconds >= 3600 {
-        format!("{}h {}m", seconds / 3600, seconds % 3600 / 60)
+        crate::trf!("{h}h {m}m", h = seconds / 3600, m = seconds % 3600 / 60)
     } else {
-        format!("{}m", seconds / 60)
+        crate::trf!("{m}m", m = seconds / 60)
     }
 }
 
@@ -291,9 +295,9 @@ pub fn redraw(app: &Rc<App>) {
         .is_some_and(|(g, t)| t.resolved_provider(&g) == crate::model::SessionProvider::Codex);
     let (usage, plan, placeholder) = if codex_selected {
         let (usage, plan) = crate::codex::usage(app);
-        (usage, plan, "Codex usage…")
+        (usage, plan, tr("Codex usage…"))
     } else {
-        (claude(), None, "Claude usage…")
+        (claude(), None, tr("Claude usage…"))
     };
     if let Some(plan) = plan {
         let label = gtk::Label::new(Some(&plan));
@@ -333,10 +337,10 @@ fn limit_view(limit: &Limit) -> gtk::Box {
     bar.set_size_request(48, 3);
     vbox.append(&bar);
     if let Some(at) = limit.resets_at {
-        vbox.set_tooltip_text(Some(&format!(
-            "{} resets in {}",
-            limit.label,
-            resets_in(at)
+        vbox.set_tooltip_text(Some(&crate::trf!(
+            "{label} resets in {time}",
+            label = limit.label,
+            time = resets_in(at)
         )));
     }
     vbox

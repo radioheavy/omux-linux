@@ -3,6 +3,7 @@
 //! Mirrors `PullRequests.swift`; polling and UI live elsewhere.
 
 use crate::git;
+use crate::i18n::tr;
 use serde::Deserialize;
 use std::path::Path;
 
@@ -185,25 +186,25 @@ impl PullRequest {
     /// The most pressing fact about it, for tight spaces.
     pub fn summary(&self) -> &'static str {
         match self.state {
-            PrState::Merged => return "Merged",
-            PrState::Closed => return "Closed",
+            PrState::Merged => return tr("Merged"),
+            PrState::Closed => return tr("Closed"),
             PrState::Open => {}
         }
         let checks = self.checks_result();
         if checks == Some(CheckResult::Failed) {
-            "Checks failing"
+            tr("Checks failing")
         } else if self.review() == Some("CHANGES_REQUESTED") {
-            "Changes requested"
+            tr("Changes requested")
         } else if checks == Some(CheckResult::Pending) {
-            "Checks running"
+            tr("Checks running")
         } else if self.is_draft {
-            "Draft"
+            tr("Draft")
         } else if self.review() == Some("APPROVED") {
-            "Approved"
+            tr("Approved")
         } else if checks == Some(CheckResult::Passed) {
-            "Checks passed"
+            tr("Checks passed")
         } else {
-            "Open"
+            tr("pr|Open")
         }
     }
 

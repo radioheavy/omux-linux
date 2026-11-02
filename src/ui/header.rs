@@ -7,6 +7,7 @@ use adw::prelude::*;
 
 use super::sidebar::{dot, dot_color, set_dot};
 use crate::app::App;
+use crate::i18n::tr;
 use crate::model::SessionProvider;
 use crate::persistence::abbreviate_home;
 
@@ -54,7 +55,7 @@ impl Header {
         row.append(&status);
 
         let permission = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-        for (label, action) in [("Allow", "app.allow"), ("Deny", "app.deny")] {
+        for (label, action) in [(tr("Allow"), "app.allow"), (tr("Deny"), "app.deny")] {
             let button = gtk::Button::with_label(label);
             button.add_css_class("omux-small");
             if action == "app.allow" {
@@ -65,7 +66,7 @@ impl Header {
         }
         let info = gtk::MenuButton::builder()
             .icon_name("dialog-information-symbolic")
-            .tooltip_text("What Codex asks for")
+            .tooltip_text(tr("What Codex asks for"))
             .build();
         info.add_css_class("flat");
         permission.append(&info);
@@ -87,7 +88,7 @@ impl Header {
 
         let panel_toggle = gtk::ToggleButton::builder()
             .icon_name("sidebar-show-right-symbolic")
-            .tooltip_text("Files panel (F9)")
+            .tooltip_text(tr("Files panel (F9)"))
             .action_name("app.toggle-panel")
             .build();
         panel_toggle.add_css_class("flat");
@@ -184,12 +185,14 @@ impl Header {
         if rt.busy {
             self.start_stop
                 .set_icon_name("media-playback-stop-symbolic");
-            self.start_stop.set_tooltip_text(Some("Interrupt (Ctrl-C)"));
+            self.start_stop
+                .set_tooltip_text(Some(tr("Interrupt (Ctrl-C)")));
         } else {
             self.start_stop
                 .set_icon_name("media-playback-start-symbolic");
-            self.start_stop
-                .set_tooltip_text(Some("Start or continue this session (Ctrl+Shift+Enter)"));
+            self.start_stop.set_tooltip_text(Some(tr(
+                "Start or continue this session (Ctrl+Shift+Enter)",
+            )));
         }
         crate::ui::agents::update_header(app, id, &self.extras);
     }

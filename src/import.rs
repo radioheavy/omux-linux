@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::claude::RecentSession;
+use crate::i18n::tr;
 use crate::model::{SessionProvider, TabGroup, TabItem, Workspace};
 use crate::persistence::expand_tilde;
 use crate::runtime::TabRuntime;
@@ -159,18 +160,21 @@ pub fn add(app: &Rc<App>, planned: Vec<PlannedGroup>, host: Option<&str>) -> (us
 pub fn run_and_report(app: &Rc<App>) {
     let (sessions, projects) = run(app);
     let body = match (sessions, projects) {
-        (0, _) => "Every Claude Code conversation on this computer already has a session.".to_string(),
-        (1, _) => "Added 1 conversation. Select it to continue where you left off.".to_string(),
-        (n, 0) => format!("Added {n} conversations. Select one to continue where you left off."),
-        (n, 1) => format!(
-            "Added {n} conversations in 1 new project. Select one to continue where you left off."
+        (0, _) => tr("Every Claude Code conversation on this computer already has a session.").to_string(),
+        (1, _) => tr("Added 1 conversation. Select it to continue where you left off.").to_string(),
+        (n, 0) => crate::trf!("Added {n} conversations. Select one to continue where you left off.", n = n),
+        (n, 1) => crate::trf!(
+            "Added {n} conversations in 1 new project. Select one to continue where you left off.",
+            n = n
         ),
-        (n, p) => format!(
-            "Added {n} conversations in {p} new projects. Select one to continue where you left off."
+        (n, p) => crate::trf!(
+            "Added {n} conversations in {p} new projects. Select one to continue where you left off.",
+            n = n,
+            p = p
         ),
     };
-    let dialog = adw::AlertDialog::new(Some("Claude Code Conversations"), Some(&body));
-    dialog.add_response("ok", "OK");
+    let dialog = adw::AlertDialog::new(Some(tr("Claude Code Conversations")), Some(&body));
+    dialog.add_response("ok", tr("OK"));
     dialog.set_default_response(Some("ok"));
     dialog.present(Some(&app.ui.window));
 }

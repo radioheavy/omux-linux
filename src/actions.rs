@@ -10,6 +10,7 @@ use uuid::Uuid;
 use vte::prelude::*;
 
 use crate::app::App;
+use crate::i18n::tr;
 use crate::model::{SessionProvider, TabColor};
 use crate::ui::dialogs;
 
@@ -348,7 +349,7 @@ fn about(app: &Rc<App>) {
         .application_name("omux")
         .application_icon(crate::APP_ID)
         .version(env!("CARGO_PKG_VERSION"))
-        .comments("A terminal for running many Claude Code and Codex sessions side by side.\n\nThe Linux version of omux for macOS by Onur Özcan.")
+        .comments(tr("A terminal for running many Claude Code and Codex sessions side by side.\n\nThe Linux version of omux for macOS by Onur Özcan."))
         .website("https://github.com/radioheavy/omux-linux")
         .issue_url("https://github.com/radioheavy/omux-linux/issues")
         .license_type(gtk::License::MitX11)
@@ -356,7 +357,7 @@ fn about(app: &Rc<App>) {
         .developers(vec!["radioheavy"])
         .build();
     about.add_acknowledgement_section(
-        Some("Based on"),
+        Some(tr("Based on")),
         &["omux for macOS by Onur Özcan https://github.com/onurozcan/omux"],
     );
     about.present(Some(&app.ui.window));
@@ -364,7 +365,7 @@ fn about(app: &Rc<App>) {
 
 fn shortcuts(app: &Rc<App>) {
     let dialog = adw::Dialog::new();
-    dialog.set_title("Keyboard Shortcuts");
+    dialog.set_title(tr("Keyboard Shortcuts"));
     dialog.set_content_width(460);
     let page = adw::PreferencesPage::new();
     let group = adw::PreferencesGroup::new();
@@ -372,10 +373,10 @@ fn shortcuts(app: &Rc<App>) {
         .iter()
         .map(|(_, accels, label)| (label.to_string(), accels[0].to_string()))
         .collect();
-    rows.push(("Session 1–9 in this project".into(), "<Alt>1…9".into()));
+    rows.push((tr("Session 1–9 in this project").into(), "<Alt>1…9".into()));
     for (label, accel) in rows {
         let row = adw::ActionRow::new();
-        row.set_title(&label);
+        row.set_title(tr(&label));
         let text = accel
             .replace("<Control>", "Ctrl+")
             .replace("<Shift>", "Shift+")

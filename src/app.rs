@@ -13,6 +13,7 @@ use gtk::{gio, glib};
 use uuid::Uuid;
 use vte::prelude::*;
 
+use crate::i18n::tr;
 use crate::model::{SessionProvider, TabGroup, TabItem, Workspace};
 use crate::notify;
 use crate::persistence::{self, expand_tilde, home_dir};
@@ -46,9 +47,9 @@ impl App {
         let fresh = saved.is_none();
         let ws = saved.unwrap_or_else(|| Workspace {
             groups: vec![TabGroup::new(
-                "Default",
+                tr("Default"),
                 None,
-                vec![TabItem::new("Session 1")],
+                vec![TabItem::new(tr("Session 1"))],
             )],
             selected_tab_id: None,
         });
@@ -791,7 +792,7 @@ impl App {
             crate::ui::worktree_sheet::present(self, group_id, provider);
             return;
         }
-        let mut tab = TabItem::new(format!("Session {}", count + 1));
+        let mut tab = TabItem::new(crate::trf!("Session {n}", n = count + 1));
         if let Some(provider) = provider {
             tab.provider = Some(provider);
             tab.command = Some(provider.command().to_string());
@@ -881,9 +882,9 @@ impl App {
 
     pub fn new_group(self: &Rc<Self>) {
         let count = self.ws.borrow().groups.len();
-        let tab = TabItem::new("Session 1");
+        let tab = TabItem::new(tr("Session 1"));
         let id = tab.id;
-        let group = TabGroup::new(format!("Project {}", count + 1), None, vec![tab]);
+        let group = TabGroup::new(crate::trf!("Project {n}", n = count + 1), None, vec![tab]);
         let group_id = group.id;
         self.ws.borrow_mut().groups.push(group);
         self.runtime.borrow_mut().insert(id, TabRuntime::default());
@@ -919,7 +920,7 @@ impl App {
         let group = TabGroup::new(name, Some(text), vec![]);
         let group_id = group.id;
         self.ws.borrow_mut().groups.push(group);
-        self.add_session(group_id, TabItem::new("Session 1"), None, None);
+        self.add_session(group_id, TabItem::new(tr("Session 1")), None, None);
     }
 
     pub fn close_tab(self: &Rc<Self>, id: Uuid) {

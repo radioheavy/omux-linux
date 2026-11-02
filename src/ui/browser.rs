@@ -15,6 +15,7 @@ use vte::prelude::*;
 use webkit6::prelude::*;
 
 use crate::app::App;
+use crate::i18n::tr;
 
 /// The Mac's picker script (Browser.swift), unchanged.
 const PICKER: &str = include_str!("picker.js");
@@ -48,7 +49,7 @@ thread_local! {
 pub fn build(app: &Rc<App>) -> gtk::Widget {
     let stack = gtk::Stack::new();
     let none = adw::StatusPage::builder()
-        .title("No session")
+        .title(tr("No session"))
         .icon_name("web-browser-symbolic")
         .build();
     stack.add_named(&none, Some("none"));
@@ -137,7 +138,7 @@ fn fill_empty(page: &Page, id: Uuid, urls: &[String]) {
     }
     if urls.is_empty() {
         let hint = gtk::Label::new(Some(
-            "Type an address above. Local servers this session prints, like localhost:3000, open here by themselves.",
+            tr("Type an address above. Local servers this session prints, like localhost:3000, open here by themselves."),
         ));
         hint.set_wrap(true);
         hint.set_justify(gtk::Justification::Center);
@@ -197,9 +198,9 @@ fn build_page(id: Uuid) -> Page {
     toolbar.set_margin_end(4);
     toolbar.set_margin_top(3);
     toolbar.set_margin_bottom(3);
-    let back = icon_button("go-previous-symbolic", "Back");
-    let forward = icon_button("go-next-symbolic", "Forward");
-    let reload = icon_button("view-refresh-symbolic", "Reload");
+    let back = icon_button("go-previous-symbolic", tr("Back"));
+    let forward = icon_button("go-next-symbolic", tr("Forward"));
+    let reload = icon_button("view-refresh-symbolic", tr("Reload"));
     let address = gtk::Entry::new();
     address.set_placeholder_text(Some("localhost:3000"));
     address.set_hexpand(true);
@@ -207,9 +208,9 @@ fn build_page(id: Uuid) -> Page {
     pick.set_icon_name("find-location-symbolic");
     pick.add_css_class("flat");
     pick.add_css_class("omux-small");
-    pick.set_tooltip_text(Some("Pick an element for the session's prompt"));
+    pick.set_tooltip_text(Some(tr("Pick an element for the session's prompt")));
     pick.set_sensitive(false);
-    let external = icon_button("web-browser-symbolic", "Open in default browser");
+    let external = icon_button("web-browser-symbolic", tr("Open in default browser"));
     for w in [
         back.upcast_ref::<gtk::Widget>(),
         forward.upcast_ref(),
@@ -269,7 +270,7 @@ fn build_page(id: Uuid) -> Page {
             w.evaluate_javascript(PICKER, None, None, gio::Cancellable::NONE, |_| {});
             show_notice(
                 id,
-                "Click an element to add it to the session prompt. Esc cancels.",
+                tr("Click an element to add it to the session prompt. Esc cancels."),
             );
         } else {
             hide_notice(id);
@@ -335,9 +336,11 @@ fn build_page(id: Uuid) -> Page {
             BROWSER.with(|b| b.borrow().as_ref().and_then(|b| b.pages.get(&id).cloned()))
         {
             let page = page.borrow();
-            page.banner
-                .set_title(&format!("Couldn't load the page: {}", error.message()));
-            page.banner.set_button_label(Some("Try Again"));
+            page.banner.set_title(&crate::trf!(
+                "Couldn't load the page: {error}",
+                error = error.message()
+            ));
+            page.banner.set_button_label(Some(tr("Try Again")));
             page.banner.set_revealed(true);
         }
         false
@@ -383,7 +386,7 @@ pub fn load(id: Uuid, text: &str) {
         format!("http://{text}")
     };
     if glib::Uri::parse(&uri, glib::UriFlags::NONE).is_err() {
-        page.banner.set_title("That isn't a valid address.");
+        page.banner.set_title(tr("That isn't a valid address."));
         page.banner.set_button_label(None);
         page.banner.set_revealed(true);
         return;
@@ -463,7 +466,10 @@ fn received(id: Uuid, json: &str) {
         }
         text.push_str(". ");
         app.send_text(id, &text, false);
-        show_notice(id, &format!("Added {selector} to the prompt"));
+        show_notice(
+            id,
+            &crate::trf!("Added {selector} to the prompt", selector = selector),
+        );
     };
     if rect.2 < 1.0 || rect.3 < 1.0 {
         send(None);

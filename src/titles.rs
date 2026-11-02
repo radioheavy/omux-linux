@@ -15,13 +15,16 @@ use crate::search::{Entry, Index};
 
 /// `Session`, `Session 3`: what new sessions are called.
 fn is_default_name(name: &str) -> bool {
-    match name.strip_prefix("Session") {
-        Some("") => true,
-        Some(rest) => rest
-            .strip_prefix(' ')
-            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())),
-        None => false,
-    }
+    // In English, and in the interface language ("Oturum 3").
+    ["Session", crate::i18n::tr("Session")]
+        .iter()
+        .any(|prefix| match name.strip_prefix(prefix) {
+            Some("") => true,
+            Some(rest) => rest
+                .strip_prefix(' ')
+                .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())),
+            None => false,
+        })
 }
 
 /// The name a session should get from its conversation, if its current

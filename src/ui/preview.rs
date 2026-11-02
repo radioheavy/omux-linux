@@ -11,6 +11,7 @@ use gtk::{gio, glib};
 use webkit6::prelude::*;
 
 use crate::app::App;
+use crate::i18n::tr;
 
 const IMAGES: [&str; 8] = ["png", "jpg", "jpeg", "heic", "bmp", "tiff", "tif", "webp"];
 const MEDIA: [&str; 9] = [
@@ -175,12 +176,12 @@ fn code_view(text: &str, wrap: bool) -> gtk::TextView {
 
 fn other(path: &Path) -> gtk::Widget {
     let page = adw::StatusPage::builder()
-        .title("No preview")
-        .description("Open it with the default app.")
+        .title(tr("No preview"))
+        .description(tr("Open it with the default app."))
         .icon_name("document-open-symbolic")
         .build();
     page.add_css_class("compact");
-    let button = gtk::Button::with_label("Open");
+    let button = gtk::Button::with_label(tr("Open"));
     button.set_halign(gtk::Align::Center);
     button.add_css_class("pill");
     let uri = gio::File::for_path(path).uri();
@@ -222,9 +223,9 @@ fn header(app: &Rc<App>, path: &Path, textual: bool) -> gtk::Box {
         toggle.add_css_class("flat");
         toggle.add_css_class("omux-small");
         toggle.set_tooltip_text(Some(if wrap {
-            "Don't wrap lines"
+            tr("Don't wrap lines")
         } else {
-            "Wrap lines"
+            tr("Wrap lines")
         }));
         let weak = Rc::downgrade(app);
         let path = path.to_path_buf();
@@ -238,13 +239,13 @@ fn header(app: &Rc<App>, path: &Path, textual: bool) -> gtk::Box {
         header.append(&toggle);
     }
     let open = gtk::Button::from_icon_name("document-open-symbolic");
-    open.set_tooltip_text(Some("Open with default app"));
+    open.set_tooltip_text(Some(tr("Open with default app")));
     let uri = gio::File::for_path(path).uri();
     open.connect_clicked(move |_| {
         let _ = gio::AppInfo::launch_default_for_uri(&uri, gio::AppLaunchContext::NONE);
     });
     let reveal = gtk::Button::from_icon_name("folder-open-symbolic");
-    reveal.set_tooltip_text(Some("Show in Files"));
+    reveal.set_tooltip_text(Some(tr("Show in Files")));
     let target = path.to_path_buf();
     reveal.connect_clicked(move |_| crate::ui::files::show_in_files(&target));
     for b in [&open, &reveal] {

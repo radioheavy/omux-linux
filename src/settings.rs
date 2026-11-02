@@ -48,6 +48,9 @@ pub struct Settings {
     pub idle_close_minutes: u32,
     /// Sidebar machine tab: `all`, `local` or an SSH host (Linux only).
     pub sidebar_machine: String,
+    /// `auto` (the system's), `en` or `tr`; applies at the next launch
+    /// (Linux only).
+    pub language: String,
 }
 
 impl Default for Settings {
@@ -78,6 +81,7 @@ impl Default for Settings {
             resume_on_select: true,
             idle_close_minutes: 0,
             sidebar_machine: "all".into(),
+            language: "auto".into(),
         }
     }
 }

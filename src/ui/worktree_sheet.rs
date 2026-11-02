@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::git;
+use crate::i18n::tr;
 use crate::model::{SessionProvider, TabItem, Worktree};
 use crate::ui::panel::background;
 
@@ -32,35 +33,35 @@ pub fn present(app: &Rc<App>, group_id: Uuid, provider: Option<SessionProvider>)
 
     let page = adw::PreferencesPage::new();
     page.set_description(
-        "The session works on its own branch in its own folder, so sessions don't touch each other's files.",
+        tr("The session works on its own branch in its own folder, so sessions don't touch each other's files."),
     );
     let main = adw::PreferencesGroup::new();
     let name = adw::EntryRow::new();
-    name.set_title("Name");
-    name.set_text(&format!("Session {}", group.tabs.len() + 1));
+    name.set_title(tr("Name"));
+    name.set_text(&crate::trf!("Session {n}", n = group.tabs.len() + 1));
     main.add(&name);
     let agent = adw::ComboRow::new();
-    agent.set_title("Agent");
-    agent.set_model(Some(&gtk::StringList::new(&AGENTS.map(|(_, l)| l))));
+    agent.set_title(tr("Agent"));
+    agent.set_model(Some(&gtk::StringList::new(&AGENTS.map(|(_, l)| tr(l)))));
     agent.set_selected(AGENTS.iter().position(|(p, _)| *p == provider).unwrap_or(0) as u32);
     main.add(&agent);
     page.add(&main);
 
     let git_group = adw::PreferencesGroup::new();
     let branch = adw::EntryRow::new();
-    branch.set_title("Branch");
+    branch.set_title(tr("Branch"));
     branch.add_css_class("omux-mono");
     branch.set_text(&git::slug(&name.text()));
     git_group.add(&branch);
     let base = adw::ComboRow::new();
-    base.set_title("From");
+    base.set_title(tr("From"));
     git_group.add(&base);
     let folder = adw::ActionRow::new();
-    folder.set_title("Folder");
+    folder.set_title(tr("Folder"));
     folder.set_subtitle_selectable(true);
     git_group.add(&folder);
     let setup = adw::EntryRow::new();
-    setup.set_title("Setup (cp \"$OMUX_REPO/.env\" . && npm install)");
+    setup.set_title(tr("Setup (cp \"$OMUX_REPO/.env\" . && npm install)"));
     setup.add_css_class("omux-mono");
     setup.set_text(&group.worktree_setup);
     git_group.add(&setup);
@@ -72,7 +73,10 @@ pub fn present(app: &Rc<App>, group_id: Uuid, provider: Option<SessionProvider>)
 
     let options = adw::PreferencesGroup::new();
     let remember = adw::SwitchRow::new();
-    remember.set_title(&format!("Use worktrees for new sessions in {}", group.name));
+    remember.set_title(&crate::trf!(
+        "Use worktrees for new sessions in {name}",
+        name = group.name
+    ));
     remember.set_active(group.use_worktrees);
     options.add(&remember);
     let error = gtk::Label::new(None);
@@ -84,12 +88,12 @@ pub fn present(app: &Rc<App>, group_id: Uuid, provider: Option<SessionProvider>)
     page.add(&options);
 
     let dialog = adw::Dialog::new();
-    dialog.set_title("New Session in Worktree");
+    dialog.set_title(tr("New Session in Worktree"));
     dialog.set_content_width(480);
     let bar = adw::HeaderBar::new();
     bar.set_show_end_title_buttons(false);
     bar.set_show_start_title_buttons(false);
-    let cancel = gtk::Button::with_label("Cancel");
+    let cancel = gtk::Button::with_label(tr("Cancel"));
     let d = dialog.downgrade();
     cancel.connect_clicked(move |_| {
         if let Some(d) = d.upgrade() {
@@ -97,7 +101,7 @@ pub fn present(app: &Rc<App>, group_id: Uuid, provider: Option<SessionProvider>)
         }
     });
     bar.pack_start(&cancel);
-    let create = gtk::Button::with_label("Create");
+    let create = gtk::Button::with_label(tr("Create"));
     create.add_css_class("suggested-action");
     create.set_sensitive(false);
     bar.pack_end(&create);
@@ -205,8 +209,8 @@ pub fn present(app: &Rc<App>, group_id: Uuid, provider: Option<SessionProvider>)
             }
             None => {
                 e.set_text(&match &group.directory {
-                    Some(dir) => format!("{dir} isn't a Git repository."),
-                    None => "This project has no folder.".into(),
+                    Some(dir) => crate::trf!("{dir} isn't a Git repository.", dir = dir),
+                    None => tr("This project has no folder.").into(),
                 });
                 e.add_css_class("warning");
                 e.set_visible(true);

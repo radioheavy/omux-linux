@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::claude::SubAgent;
+use crate::i18n::tr;
 
 pub const TABS: [(&str, &str); 3] = [
     ("files", "Files"),
@@ -49,7 +50,7 @@ pub fn build(app: &Rc<App>) {
         };
         icon.set_pixel_size(12);
         content.append(&icon);
-        content.append(&gtk::Label::new(Some(label)));
+        content.append(&gtk::Label::new(Some(tr(label))));
         if key == "changes" {
             content.append(&changes_badge);
         }

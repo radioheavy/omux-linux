@@ -15,6 +15,7 @@ use vte::prelude::*;
 
 use crate::app::App;
 use crate::claude::SubAgent;
+use crate::i18n::tr;
 
 /// Names never listed, as on the Mac.
 const SKIPPED: [&str; 7] = [
@@ -79,8 +80,8 @@ pub fn build(app: &Rc<App>) -> gtk::Widget {
     root_label.set_xalign(0.0);
     root_label.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
     header.append(&root_label);
-    let by_name = gtk::ToggleButton::with_label("Name");
-    let by_date = gtk::ToggleButton::with_label("Date");
+    let by_name = gtk::ToggleButton::with_label(tr("Name"));
+    let by_date = gtk::ToggleButton::with_label(tr("Date"));
     by_date.set_group(Some(&by_name));
     let sort = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     sort.add_css_class("linked");
@@ -97,7 +98,7 @@ pub fn build(app: &Rc<App>) -> gtk::Widget {
     let open = gtk::Button::from_icon_name("folder-open-symbolic");
     open.add_css_class("flat");
     open.add_css_class("omux-small");
-    open.set_tooltip_text(Some("Open folder"));
+    open.set_tooltip_text(Some(tr("Open folder")));
     header.append(&open);
     tree_box.append(&header);
 
@@ -239,7 +240,7 @@ fn apply_collapsed(collapsed: bool) {
 }
 
 fn placeholder() -> gtk::Widget {
-    let label = gtk::Label::new(Some("Select a file to preview"));
+    let label = gtk::Label::new(Some(tr("Select a file to preview")));
     label.add_css_class("dim-label");
     label.set_vexpand(true);
     label.upcast()
@@ -468,7 +469,7 @@ fn rebuild() {
         let Some(root) = f.root.clone() else { return };
         let by_date = f.by_date.is_active();
         if !f.mentioned.is_empty() {
-            f.list.append(&section("Mentioned in session"));
+            f.list.append(&section(tr("Mentioned in session")));
             for path in f.mentioned.iter().rev() {
                 let label = path
                     .strip_prefix(&root)
@@ -569,7 +570,7 @@ fn row_menu(list: &gtk::ListBox) {
         let popover = gtk::Popover::new();
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
         for (label, action) in [("Open", 0), ("Show in Files", 1), ("Copy Path", 2)] {
-            let button = gtk::Button::with_label(label);
+            let button = gtk::Button::with_label(tr(label));
             button.add_css_class("flat");
             let path = path.clone();
             let pop = popover.downgrade();

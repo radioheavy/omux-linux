@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::git::{self, ChangedFile, DiffKind, DiffLine};
+use crate::i18n::tr;
 use crate::model::SessionProvider;
 use crate::ui::panel::background;
 
@@ -179,8 +180,8 @@ pub fn build(app: &Rc<App>) -> gtk::Widget {
     paned.set_position(380);
 
     let not_repo = adw::StatusPage::builder()
-        .title("Not a Git repository")
-        .description("Changes show up for sessions inside a Git repository.")
+        .title(tr("Not a Git repository"))
+        .description(tr("Changes show up for sessions inside a Git repository."))
         .icon_name("folder-symbolic")
         .build();
     not_repo.add_css_class("compact");
@@ -357,16 +358,26 @@ fn render_list() {
             .set_visible_child_name(if is_repo { "changes" } else { "not-repo" });
         c.list.remove_all();
         let count = files.len();
-        c.list_header.set_text(&format!(
-            "{count} changed file{}  vs {}",
-            if count == 1 { "" } else { "s" },
-            c.base.clone().unwrap_or_else(|| "HEAD".into())
-        ));
+        c.list_header.set_text(&{
+            let base = c.base.clone().unwrap_or_else(|| "HEAD".into());
+            if count == 1 {
+                crate::trf!("1 changed file  vs {base}", base = base)
+            } else {
+                crate::trf!(
+                    "{count} changed files  vs {base}",
+                    count = count,
+                    base = base
+                )
+            }
+        });
     });
     if files.is_empty() && is_repo {
         let page = adw::StatusPage::builder()
-            .title("No changes")
-            .description(format!("Nothing differs from {} yet.", base_name()))
+            .title(tr("No changes"))
+            .description(crate::trf!(
+                "Nothing differs from {base} yet.",
+                base = base_name()
+            ))
             .build();
         page.add_css_class("compact");
         with(|c| {
@@ -522,7 +533,7 @@ fn render_file_header(c: &Changes) {
         let open = gtk::Button::from_icon_name("document-open-symbolic");
         open.add_css_class("flat");
         open.add_css_class("omux-small");
-        open.set_tooltip_text(Some("Open with default app"));
+        open.set_tooltip_text(Some(tr("Open with default app")));
         let uri = gio::File::for_path(dir.join(&file.path)).uri();
         open.connect_clicked(move |_| {
             let _ = gio::AppInfo::launch_default_for_uri(&uri, gio::AppLaunchContext::NONE);
@@ -629,10 +640,10 @@ fn diff_click(view: &gtk::TextView) {
         })
         .flatten();
         let entry = gtk::Entry::new();
-        entry.set_placeholder_text(Some("Review note"));
+        entry.set_placeholder_text(Some(tr("Review note")));
         entry.set_text(existing.as_deref().unwrap_or(""));
         entry.set_width_chars(40);
-        let add = gtk::Button::with_label("Add");
+        let add = gtk::Button::with_label(tr("Add"));
         add.add_css_class("suggested-action");
         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         hbox.append(&entry);
@@ -707,17 +718,17 @@ fn render_footer() {
     });
     let footer = with(|c| c.footer.clone()).expect("footer");
     if notes.is_empty() {
-        let hint = gtk::Label::new(Some("Click a line to leave a note"));
+        let hint = gtk::Label::new(Some(tr("Click a line to leave a note")));
         hint.add_css_class("omux-status");
         hint.set_hexpand(true);
         hint.set_xalign(0.0);
         footer.append(&hint);
     } else {
-        let count = gtk::Label::new(Some(&format!(
-            "{} note{}",
-            notes.len(),
-            if notes.len() == 1 { "" } else { "s" }
-        )));
+        let count = gtk::Label::new(Some(&if notes.len() == 1 {
+            tr("1 note").to_string()
+        } else {
+            crate::trf!("{n} notes", n = notes.len())
+        }));
         count.add_css_class("omux-status");
         count.set_hexpand(true);
         count.set_xalign(0.0);
@@ -726,13 +737,13 @@ fn render_footer() {
             .tab(id)
             .is_some_and(|(g, t)| t.resolved_provider(&g) == SessionProvider::Codex);
         let send = gtk::Button::with_label(if codex {
-            "Send to Codex"
+            tr("Send to Codex")
         } else {
-            "Send to Claude"
+            tr("Send to Claude")
         });
         send.add_css_class("suggested-action");
         send.add_css_class("omux-small");
-        send.set_tooltip_text(Some("Types the notes into the session and sends them"));
+        send.set_tooltip_text(Some(tr("Types the notes into the session and sends them")));
         let weak = Rc::downgrade(&app);
         send.connect_clicked(move |_| {
             let Some(app) = weak.upgrade() else { return };

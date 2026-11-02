@@ -7,18 +7,19 @@ use gtk::{gdk, gio, glib};
 use uuid::Uuid;
 
 use crate::app::App;
+use crate::i18n::tr;
 use crate::model::SessionProvider;
 use crate::persistence::abbreviate_home;
 
 /// A dialog with Cancel / primary buttons in its header and `page` as content.
 pub fn form(title: &str, primary: &str, page: &adw::PreferencesPage) -> (adw::Dialog, gtk::Button) {
     let dialog = adw::Dialog::new();
-    dialog.set_title(title);
+    dialog.set_title(tr(title));
     dialog.set_content_width(480);
     let bar = adw::HeaderBar::new();
     bar.set_show_end_title_buttons(false);
     bar.set_show_start_title_buttons(false);
-    let cancel = gtk::Button::with_label("Cancel");
+    let cancel = gtk::Button::with_label(tr("Cancel"));
     let d = dialog.downgrade();
     cancel.connect_clicked(move |_| {
         if let Some(d) = d.upgrade() {
@@ -26,7 +27,7 @@ pub fn form(title: &str, primary: &str, page: &adw::PreferencesPage) -> (adw::Di
         }
     });
     bar.pack_start(&cancel);
-    let save = gtk::Button::with_label(primary);
+    let save = gtk::Button::with_label(tr(primary));
     save.add_css_class("suggested-action");
     bar.pack_end(&save);
     let view = adw::ToolbarView::new();
@@ -40,11 +41,11 @@ pub fn form(title: &str, primary: &str, page: &adw::PreferencesPage) -> (adw::Di
 /// An entry row with a "Choose…" folder button.
 fn folder_row(app: &Rc<App>, title: &str, value: Option<&str>, placeholder: &str) -> adw::EntryRow {
     let row = adw::EntryRow::new();
-    row.set_title(&format!("{title} ({placeholder})"));
+    row.set_title(&format!("{} ({placeholder})", tr(title)));
     if let Some(value) = value {
         row.set_text(value);
     }
-    let choose = gtk::Button::with_label("Choose…");
+    let choose = gtk::Button::with_label(tr("Choose…"));
     choose.set_valign(gtk::Align::Center);
     choose.add_css_class("flat");
     let weak = Rc::downgrade(app);
@@ -61,7 +62,7 @@ fn folder_row(app: &Rc<App>, title: &str, value: Option<&str>, placeholder: &str
 
 pub fn choose_folder(app: &Rc<App>, done: impl FnOnce(std::path::PathBuf) + 'static) {
     let dialog = gtk::FileDialog::builder()
-        .title("Choose a folder")
+        .title(tr("Choose a folder"))
         .modal(true)
         .build();
     dialog.select_folder(
@@ -113,7 +114,8 @@ fn session_choice(provider: Option<SessionProvider>, command: Option<&str>) -> C
 }
 
 fn combo(labels: &[&str], selected: usize) -> adw::ComboRow {
-    let model = gtk::StringList::new(labels);
+    let labels: Vec<&str> = labels.iter().map(|l| tr(l)).collect();
+    let model = gtk::StringList::new(&labels);
     let row = adw::ComboRow::new();
     row.set_model(Some(&model));
     row.set_selected(selected as u32);
@@ -127,7 +129,7 @@ pub fn edit_session(app: &Rc<App>, id: Uuid) {
     let page = adw::PreferencesPage::new();
     let main = adw::PreferencesGroup::new();
     let name = adw::EntryRow::new();
-    name.set_title("Name");
+    name.set_title(tr("Name"));
     name.set_text(&tab.name);
     main.add(&name);
     let project_dir = group.directory.clone().unwrap_or_else(|| "~".into());
@@ -143,15 +145,18 @@ pub fn edit_session(app: &Rc<App>, id: Uuid) {
         .position(|(c, _)| *c == choice)
         .unwrap_or(0);
     let command = combo(&labels, index);
-    command.set_title("Command");
+    command.set_title(tr("Command"));
     let inherited = match group.command.as_deref() {
         Some(c) if !c.is_empty() => c.to_string(),
-        _ => "plain shell".into(),
+        _ => tr("plain shell").into(),
     };
-    command.set_subtitle(&format!("Project default: {inherited}"));
+    command.set_subtitle(&crate::trf!(
+        "Project default: {inherited}",
+        inherited = inherited
+    ));
     command_group.add(&command);
     let custom = adw::EntryRow::new();
-    custom.set_title("Custom command (claude)");
+    custom.set_title(tr("Custom command (claude)"));
     if choice == CommandChoice::Custom {
         custom.set_text(tab.command.as_deref().unwrap_or(""));
     }
@@ -167,13 +172,13 @@ pub fn edit_session(app: &Rc<App>, id: Uuid) {
     let conversation = adw::PreferencesGroup::new();
     let fresh = adw::SwitchRow::new();
     if matches!(provider, SessionProvider::Claude | SessionProvider::Codex) {
-        conversation.set_title("Conversation");
+        conversation.set_title(tr("Conversation"));
         let id_text = match provider {
             SessionProvider::Claude => tab.claude_session_id.to_string().to_lowercase(),
             _ => tab
                 .codex_thread_id
                 .clone()
-                .unwrap_or_else(|| "New conversation".into()),
+                .unwrap_or_else(|| tr("New conversation").into()),
         };
         let row = adw::ActionRow::new();
         row.set_title(&id_text);
@@ -181,7 +186,7 @@ pub fn edit_session(app: &Rc<App>, id: Uuid) {
         row.set_subtitle_selectable(true);
         row.set_title_selectable(true);
         conversation.add(&row);
-        fresh.set_title("Start a fresh conversation on next restart");
+        fresh.set_title(tr("Start a fresh conversation on next restart"));
         conversation.add(&fresh);
         page.add(&conversation);
     }
@@ -250,21 +255,21 @@ pub fn edit_project(app: &Rc<App>, group_id: Uuid) {
     let page = adw::PreferencesPage::new();
     let main = adw::PreferencesGroup::new();
     let name = adw::EntryRow::new();
-    name.set_title("Name");
+    name.set_title(tr("Name"));
     name.set_text(&group.name);
     main.add(&name);
     let folder = folder_row(app, "Folder", group.directory.as_deref(), "~");
     main.add(&folder);
     let host = adw::EntryRow::new();
-    host.set_title("SSH host (sessions run there)");
+    host.set_title(tr("SSH host (sessions run there)"));
     host.set_text(group.ssh_host.as_deref().unwrap_or(""));
     main.add(&host);
     page.add(&main);
 
     let sessions = adw::PreferencesGroup::new();
-    sessions.set_description(Some(
+    sessions.set_description(Some(tr(
         "Applies when a session starts. Existing sessions keep running.",
-    ));
+    )));
     let current = if group.command.as_deref().unwrap_or("") == group.provider.command() {
         group.provider
     } else {
@@ -285,10 +290,10 @@ pub fn edit_project(app: &Rc<App>, group_id: Uuid) {
         .position(|p| *p == current)
         .unwrap_or(0);
     let provider = combo(&labels, index);
-    provider.set_title("New sessions");
+    provider.set_title(tr("New sessions"));
     sessions.add(&provider);
     let custom = adw::EntryRow::new();
-    custom.set_title("Custom command");
+    custom.set_title(tr("Custom command"));
     if current == SessionProvider::Custom {
         custom.set_text(group.command.as_deref().unwrap_or(""));
     }
@@ -302,17 +307,19 @@ pub fn edit_project(app: &Rc<App>, group_id: Uuid) {
 
     let worktrees = adw::PreferencesGroup::new();
     let use_worktrees = adw::SwitchRow::new();
-    use_worktrees.set_title("Give new sessions their own Git worktree");
+    use_worktrees.set_title(tr("Give new sessions their own Git worktree"));
     use_worktrees.set_active(group.use_worktrees);
     worktrees.add(&use_worktrees);
     let setup = adw::EntryRow::new();
-    setup.set_title("Worktree setup (cp \"$OMUX_REPO/.env\" . && npm install)");
+    setup.set_title(tr(
+        "Worktree setup (cp \"$OMUX_REPO/.env\" . && npm install)",
+    ));
     setup.set_text(&group.worktree_setup);
     setup.add_css_class("omux-mono");
     worktrees.add(&setup);
     worktrees.set_description(Some(
-        "Runs in each new worktree before the session starts, and only starts it if setup succeeds. \
-         $OMUX_REPO is the main checkout, for copying files Git ignores.",
+        tr("Runs in each new worktree before the session starts, and only starts it if setup succeeds. \
+         $OMUX_REPO is the main checkout, for copying files Git ignores."),
     ));
     page.add(&worktrees);
 
@@ -373,13 +380,19 @@ pub fn confirm_delete_group(app: &Rc<App>, group_id: Uuid) {
         return;
     }
     let text = if running == 1 {
-        "1 running session will be closed.".to_string()
+        tr("1 running session will be closed.").to_string()
     } else {
-        format!("{running} running sessions will be closed.")
+        crate::trf!(
+            "{running} running sessions will be closed.",
+            running = running
+        )
     };
-    let dialog = adw::AlertDialog::new(Some(&format!("Delete “{name}”?")), Some(&text));
-    dialog.add_response("cancel", "Cancel");
-    dialog.add_response("delete", "Delete");
+    let dialog = adw::AlertDialog::new(
+        Some(&crate::trf!("Delete “{name}”?", name = name)),
+        Some(&text),
+    );
+    dialog.add_response("cancel", tr("Cancel"));
+    dialog.add_response("delete", tr("Delete"));
     dialog.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
     dialog.set_close_response("cancel");
     let weak = Rc::downgrade(app);
@@ -392,19 +405,19 @@ pub fn confirm_delete_group(app: &Rc<App>, group_id: Uuid) {
 }
 
 pub fn info(app: &Rc<App>, heading: &str, body: &str) {
-    let dialog = adw::AlertDialog::new(Some(heading), Some(body));
-    dialog.add_response("ok", "OK");
+    let dialog = adw::AlertDialog::new(Some(tr(heading)), Some(tr(body)));
+    dialog.add_response("ok", tr("OK"));
     dialog.present(Some(&app.ui.window));
 }
 
 /// Ctrl+Shift+P: filter sessions by name, project and terminal title.
 pub fn quick_switcher(app: &Rc<App>) {
     let dialog = adw::Dialog::new();
-    dialog.set_title("Jump to Session");
+    dialog.set_title(tr("Jump to Session"));
     dialog.set_content_width(460);
     dialog.set_content_height(380);
     let search = gtk::SearchEntry::new();
-    search.set_placeholder_text(Some("Jump to session…"));
+    search.set_placeholder_text(Some(tr("Jump to session…")));
     search.set_margin_start(12);
     search.set_margin_end(12);
     search.set_margin_top(12);

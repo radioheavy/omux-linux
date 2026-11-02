@@ -3,6 +3,7 @@
 //! URLs, diff parsing, dialog texts). No GTK here; the UI calls these from worker
 //! threads. Mirrors `Git.swift`, `Worktrees.swift` and `Changes.swift`.
 
+use crate::i18n::tr;
 use std::cmp::Ordering;
 use std::fs;
 use std::io::Read;
@@ -220,11 +221,17 @@ pub fn commit_all(dir: &Path, message: &str) -> Result<(), String> {
 pub fn merge(repo: &Path, base: &str, branch: &str) -> Result<String, String> {
     let shown = repo.display();
     let Some(current) = current_branch(repo) else {
-        return Err(format!("Couldn't read the branch checked out in {shown}."));
+        return Err(crate::trf!(
+            "Couldn't read the branch checked out in {shown}.",
+            shown = shown
+        ));
     };
     if current != base {
-        return Err(format!(
-            "{shown} has \u{201c}{current}\u{201d} checked out. Check out \u{201c}{base}\u{201d} there first."
+        return Err(crate::trf!(
+            "{shown} has “{current}” checked out. Check out “{base}” there first.",
+            shown = shown,
+            current = current,
+            base = base
         ));
     }
     let r = run(&["merge", "--no-edit", branch], repo);
@@ -284,12 +291,21 @@ fn encode_path(s: &str) -> String {
 
 // MARK: Dialog texts
 
-fn plural(n: usize, word: &str) -> String {
-    format!("{n} {word}{}", if n == 1 { "" } else { "s" })
+/// "1 commit" or "3 commits", in the interface language.
+fn count(n: usize, one: &str, many: &str) -> String {
+    if n == 1 {
+        tr(one).to_string()
+    } else {
+        tr(many).replace("{n}", &n.to_string())
+    }
+}
+
+fn uncommitted(n: usize) -> String {
+    count(n, "1 uncommitted file", "{n} uncommitted files")
 }
 
 pub fn close_title(name: &str) -> String {
-    format!("Close \u{201c}{name}\u{201d}?")
+    crate::trf!("Close “{name}”?", name = name)
 }
 
 /// Body of the Close Session dialog. `merged_pr` is the number of a merged pull request.
@@ -301,52 +317,68 @@ pub fn close_text(
     merged_pr: Option<u64>,
 ) -> String {
     if let Some(n) = merged_pr {
-        let mut text = format!("Its pull request #{n} was merged.");
+        let mut text = crate::trf!("Its pull request #{n} was merged.", n = n);
         if dirty > 0 {
-            text += &format!(" The worktree has {}.", plural(dirty, "uncommitted file"));
+            text += &crate::trf!(" The worktree has {files}.", files = uncommitted(dirty));
         }
         return text;
     }
     let mut facts = Vec::new();
     if dirty > 0 {
-        facts.push(plural(dirty, "uncommitted file"));
+        facts.push(uncommitted(dirty));
     }
     if ahead > 0 {
-        facts.push(format!("{} not in {base}", plural(ahead, "commit")));
+        let commits = count(ahead, "1 commit", "{n} commits");
+        facts.push(crate::trf!(
+            "{commits} not in {base}",
+            commits = commits,
+            base = base
+        ));
     }
     if facts.is_empty() {
-        format!(
-            "Its worktree on \u{201c}{branch}\u{201d} has nothing that isn't already in {base}."
+        crate::trf!(
+            "Its worktree on “{branch}” has nothing that isn't already in {base}.",
+            branch = branch,
+            base = base
         )
     } else {
-        format!(
-            "Its worktree on \u{201c}{branch}\u{201d} has {}.",
-            facts.join(" and ")
+        crate::trf!(
+            "Its worktree on “{branch}” has {facts}.",
+            branch = branch,
+            facts = facts.join(tr(" and "))
         )
     }
 }
 
 pub fn cleanup_title(name: &str) -> String {
-    format!("Delete the worktree for \u{201c}{name}\u{201d}?")
+    crate::trf!("Delete the worktree for “{name}”?", name = name)
 }
 
 pub fn cleanup_text(branch: &str, merged_pr: Option<u64>, dirty: usize) -> String {
-    let number = merged_pr.map(|n| format!(" in #{n}")).unwrap_or_default();
-    let mut text = format!(
-        "\u{201c}{branch}\u{201d} was merged{number}. This closes the session and deletes its worktree and local branch."
-    );
+    let mut text = match merged_pr {
+        Some(n) => crate::trf!(
+            "“{branch}” was merged in #{n}. This closes the session and deletes its worktree and local branch.",
+            branch = branch,
+            n = n
+        ),
+        None => crate::trf!(
+            "“{branch}” was merged. This closes the session and deletes its worktree and local branch.",
+            branch = branch
+        ),
+    };
     if dirty > 0 {
-        text += &format!(" {} will be lost.", plural(dirty, "uncommitted file"));
+        text += &crate::trf!(" {files} will be lost.", files = uncommitted(dirty));
     }
     text
 }
 
 pub fn commit_title(dirty: usize) -> String {
-    format!("Commit {} first?", plural(dirty, "changed file"))
+    let files = count(dirty, "1 changed file", "{n} changed files");
+    crate::trf!("Commit {files} first?", files = files)
 }
 
 pub fn commit_text(branch: &str) -> String {
-    format!("They'll be committed to \u{201c}{branch}\u{201d}. Uncommitted changes aren't part of a merge or pull request.")
+    crate::trf!("They'll be committed to “{branch}”. Uncommitted changes aren't part of a merge or pull request.", branch = branch)
 }
 
 // MARK: Diffs
@@ -516,9 +548,9 @@ pub fn diff(dir: &Path, base: Option<&str>, file: &ChangedFile) -> Vec<DiffLine>
         Some(b) if file.status != 'U' => b,
         _ => {
             let Some(lines) = text_lines(&dir.join(&file.path)) else {
-                return vec![line(DiffKind::Info, "Binary or large file", None, None)];
+                return vec![line(DiffKind::Info, tr("Binary or large file"), None, None)];
             };
-            let mut out = vec![line(DiffKind::Hunk, "New file", None, None)];
+            let mut out = vec![line(DiffKind::Hunk, tr("New file"), None, None)];
             out.extend(
                 lines
                     .iter()
@@ -576,7 +608,7 @@ pub fn parse_diff(text: &str) -> Vec<DiffLine> {
             // A type change (symlink ↔ file) diffs as two files; skip the second's header.
             in_hunk = false;
         } else if l.starts_with("Binary files") {
-            lines.push(line(DiffKind::Info, "Binary file changed", None, None));
+            lines.push(line(DiffKind::Info, tr("Binary file changed"), None, None));
         } else if !in_hunk {
             continue;
         } else if let Some(t) = l.strip_prefix('+') {

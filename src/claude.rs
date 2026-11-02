@@ -14,6 +14,7 @@ use std::time::{Duration, Instant, SystemTime};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::i18n::tr;
 use crate::persistence::home_dir;
 
 /// `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
@@ -80,7 +81,7 @@ impl RecentSession {
             .collect();
         let name = words.join(" ");
         if name.is_empty() {
-            "Session".into()
+            tr("Session").into()
         } else if name.chars().count() > 32 {
             format!("{}…", name.chars().take(32).collect::<String>())
         } else {
@@ -368,7 +369,7 @@ impl SubAgent {
             .unwrap_or_default()
             .as_secs();
         if seconds >= 3600 {
-            format!("{}h {}m", seconds / 3600, seconds % 3600 / 60)
+            crate::trf!("{h}h {m}m", h = seconds / 3600, m = seconds % 3600 / 60)
         } else {
             format!("{}:{:02}", seconds / 60, seconds % 60)
         }
@@ -388,9 +389,9 @@ impl SubAgent {
     /// The tool it's using, for tight spaces: "Grep".
     pub fn short_activity(&self) -> String {
         if self.blocked {
-            "needs you".into()
+            tr("needs you").into()
         } else if self.finished {
-            "done".into()
+            tr("done").into()
         } else {
             self.activity
                 .as_deref()

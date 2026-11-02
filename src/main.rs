@@ -4,6 +4,8 @@ mod claude;
 mod codex;
 mod codex_client;
 mod git;
+mod i18n;
+mod i18n_tr;
 mod idle;
 mod import;
 mod mentions;
@@ -32,6 +34,7 @@ use gtk::{gio, glib};
 pub const APP_ID: &str = "io.github.radioheavy.omux";
 
 fn main() -> glib::ExitCode {
+    i18n::set_language(&settings::Settings::load().language);
     let gtk_app = adw::Application::builder()
         .application_id(APP_ID)
         .flags(gio::ApplicationFlags::HANDLES_OPEN)

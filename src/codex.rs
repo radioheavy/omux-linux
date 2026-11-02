@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::codex_client::{Catalog, CodexAgent, CodexState, CodexUsage, TabClient, Update};
+use crate::i18n::tr;
 use crate::model::SessionProvider;
 use crate::term::status::State;
 use crate::ui::panel::background;
@@ -147,7 +148,7 @@ pub fn start(app: &Rc<App>, id: Uuid, dir: &Path) {
         id,
         Some(State::Working),
         None,
-        Some("Connecting to Codex…".into()),
+        Some(tr("Connecting to Codex…").into()),
     );
     let client = client(id);
     let (updates, inbox) = async_channel::unbounded();
@@ -276,7 +277,7 @@ pub fn interrupt(app: &Rc<App>, id: Uuid) {
         move || client.interrupt(),
         move |result| {
             if let (Err(err), Some(app)) = (result, weak.upgrade()) {
-                alert(&app, "Couldn't interrupt Codex", &err.to_string());
+                alert(&app, tr("Couldn't interrupt Codex"), &err.to_string());
             }
         },
     );
@@ -303,7 +304,7 @@ pub fn answer(app: &Rc<App>, id: Uuid, allow: bool) {
             with(id, |s| s.answering = false);
             let Some(app) = weak.upgrade() else { return };
             if let Err(err) = result {
-                alert(&app, "Couldn't answer Codex", &err.to_string());
+                alert(&app, tr("Couldn't answer Codex"), &err.to_string());
             }
             app.refresh_session(id);
         },
@@ -427,9 +428,9 @@ pub fn header_agents(_app: &App, id: Uuid, container: &gtk::Box) {
     }
     let running = list.iter().filter(|a| !a.finished).count();
     let label = match running {
-        0 => "agents done".to_string(),
-        1 => "1 agent".to_string(),
-        n => format!("{n} agents"),
+        0 => tr("agents done").to_string(),
+        1 => tr("1 agent").to_string(),
+        n => crate::trf!("{n} agents", n = n),
     };
     let content = gtk::Box::new(gtk::Orientation::Horizontal, 4);
     content.append(&gtk::Image::from_icon_name("system-users-symbolic"));
@@ -480,7 +481,10 @@ fn show_transcript(id: Uuid, thread: &str, name: &str) {
     };
     crate::ui::panel::show_tab(&app, "files");
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    let title = gtk::Label::new(Some(&format!("{name} · Recent activity · up to 100 items")));
+    let title = gtk::Label::new(Some(&crate::trf!(
+        "{name} · Recent activity · up to 100 items",
+        name = name
+    )));
     title.add_css_class("omux-header-name");
     title.set_xalign(0.0);
     title.set_margin_start(10);
@@ -489,7 +493,7 @@ fn show_transcript(id: Uuid, thread: &str, name: &str) {
     vbox.append(&title);
     let holder = gtk::Box::new(gtk::Orientation::Vertical, 0);
     holder.set_vexpand(true);
-    let waiting = gtk::Label::new(Some("Waiting for the agent's transcript…"));
+    let waiting = gtk::Label::new(Some(tr("Waiting for the agent's transcript…")));
     waiting.add_css_class("dim-label");
     waiting.set_vexpand(true);
     holder.append(&waiting);

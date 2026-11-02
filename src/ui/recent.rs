@@ -12,6 +12,7 @@ use gtk::glib;
 use uuid::Uuid;
 
 use crate::app::App;
+use crate::i18n::tr;
 use crate::model::{SessionProvider, TabGroup, TabItem};
 use crate::persistence::abbreviate_home;
 use crate::search::{Entry, Index};
@@ -54,11 +55,11 @@ pub fn relative(date: i64) -> String {
         .unwrap_or(0);
     let seconds = (now - date).max(0);
     match seconds {
-        0..=59 => "just now".into(),
-        60..=3599 => format!("{} min. ago", seconds / 60),
-        3600..=86_399 => format!("{} hr. ago", seconds / 3600),
-        86_400..=172_799 => "yesterday".into(),
-        _ => format!("{} days ago", seconds / 86_400),
+        0..=59 => tr("just now").into(),
+        60..=3599 => crate::trf!("{n} min. ago", n = seconds / 60),
+        3600..=86_399 => crate::trf!("{n} hr. ago", n = seconds / 3600),
+        86_400..=172_799 => tr("yesterday").into(),
+        _ => crate::trf!("{n} days ago", n = seconds / 86_400),
     }
 }
 
@@ -97,17 +98,17 @@ fn conversation(entry: &Entry) -> Conversation {
 
 pub fn present(app: &Rc<App>) {
     let dialog = adw::Dialog::new();
-    dialog.set_title("Conversations");
+    dialog.set_title(tr("Conversations"));
     dialog.set_content_width(560);
     dialog.set_content_height(440);
 
     let search = gtk::SearchEntry::new();
-    search.set_placeholder_text(Some("Search inside conversations…"));
+    search.set_placeholder_text(Some(tr("Search inside conversations…")));
     search.set_hexpand(true);
-    let ask = gtk::Button::with_label("Ask Claude");
-    ask.set_tooltip_text(Some(
+    let ask = gtk::Button::with_label(tr("Ask Claude"));
+    ask.set_tooltip_text(Some(tr(
         "Find conversations by meaning: Claude Haiku reads a short digest of each one",
-    ));
+    )));
     ask.set_sensitive(false);
     let segmented = |a: &str, b: &str| {
         let first = gtk::ToggleButton::with_label(a);
@@ -120,7 +121,7 @@ pub fn present(app: &Rc<App>) {
         linked.append(&second);
         (linked, second)
     };
-    let (order_box, by_folder) = segmented("Recent", "By folder");
+    let (order_box, by_folder) = segmented(tr("Recent"), tr("By folder"));
     let (provider_box, codex) = segmented("Claude Code", "Codex");
     let current_codex = app
         .selected
@@ -321,7 +322,7 @@ fn ask_claude(app: &Rc<App>, sheet: &Rc<Sheet>) {
     if question.is_empty() {
         return;
     }
-    sheet.loading_label.set_text("Asking Claude…");
+    sheet.loading_label.set_text(tr("Asking Claude…"));
     sheet.stack.set_visible_child_name("loading");
     sheet.ask.set_sensitive(false);
     let (tx, rx) = async_channel::bounded(1);
@@ -344,7 +345,7 @@ fn ask_claude(app: &Rc<App>, sheet: &Rc<Sheet>) {
             Err(err) => {
                 sheet.answer.borrow_mut().take();
                 fill(&app, &sheet);
-                sheet.status.set_title("Couldn't ask Claude");
+                sheet.status.set_title(tr("Couldn't ask Claude"));
                 sheet.status.set_description(Some(&err));
                 sheet.stack.set_visible_child_name("status");
                 return;
@@ -371,7 +372,10 @@ fn fill(app: &Rc<App>, sheet: &Rc<Sheet>) {
     if let Some(error) = sheet.error.borrow().as_ref() {
         show_status(
             sheet,
-            &format!("No {provider_name} conversations"),
+            &crate::trf!(
+                "No {provider_name} conversations",
+                provider_name = provider_name
+            ),
             Some(error),
         );
         return;
@@ -392,7 +396,7 @@ fn fill(app: &Rc<App>, sheet: &Rc<Sheet>) {
             Some(found) => found
                 .iter()
                 .filter_map(|i| index.entries.get(*i))
-                .map(|e| (conversation(e), "Picked by Claude".to_string()))
+                .map(|e| (conversation(e), tr("Picked by Claude").to_string()))
                 .collect(),
             None => index
                 .search(&query_text, 100)
@@ -402,11 +406,11 @@ fn fill(app: &Rc<App>, sheet: &Rc<Sheet>) {
         };
         if rows.is_empty() {
             let hint = if answer.is_some() {
-                "Claude found no conversation about this."
+                tr("Claude found no conversation about this.")
             } else {
-                "No conversation has all of these words. Ask Claude finds them by meaning."
+                tr("No conversation has all of these words. Ask Claude finds them by meaning.")
             };
-            show_status(sheet, "No matches", Some(hint));
+            show_status(sheet, tr("No matches"), Some(hint));
             return;
         }
         for (index, (c, detail)) in rows.into_iter().enumerate() {
@@ -434,9 +438,12 @@ fn fill(app: &Rc<App>, sheet: &Rc<Sheet>) {
         .collect();
     if matches.is_empty() {
         let title = if items.is_empty() {
-            format!("No {provider_name} conversations found")
+            crate::trf!(
+                "No {provider_name} conversations found",
+                provider_name = provider_name
+            )
         } else {
-            "No matches".to_string()
+            tr("No matches").to_string()
         };
         show_status(sheet, &title, None);
         return;

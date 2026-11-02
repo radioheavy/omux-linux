@@ -6,6 +6,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 
 use crate::app::App;
+use crate::i18n::tr;
 use crate::notify::{play_sound, SOUNDS};
 use crate::theme::THEMES;
 
@@ -18,17 +19,18 @@ const USAGE_INTERVALS: [(f64, &str); 4] = [
 
 fn combo(title: &str, labels: &[&str], selected: usize) -> adw::ComboRow {
     let row = adw::ComboRow::new();
-    row.set_title(title);
-    row.set_model(Some(&gtk::StringList::new(labels)));
+    row.set_title(tr(title));
+    let labels: Vec<&str> = labels.iter().map(|l| tr(l)).collect();
+    row.set_model(Some(&gtk::StringList::new(&labels)));
     row.set_selected(selected as u32);
     row
 }
 
 fn switch(title: &str, subtitle: Option<&str>, active: bool) -> adw::SwitchRow {
     let row = adw::SwitchRow::new();
-    row.set_title(title);
+    row.set_title(tr(title));
     if let Some(subtitle) = subtitle {
-        row.set_subtitle(subtitle);
+        row.set_subtitle(tr(subtitle));
     }
     row.set_active(active);
     row
@@ -47,12 +49,12 @@ fn on_switch(app: &Rc<App>, row: &adw::SwitchRow, change: impl Fn(&Rc<App>, bool
 pub fn present(app: &Rc<App>) {
     let settings = app.settings.borrow().clone();
     let dialog = adw::PreferencesDialog::new();
-    dialog.set_title("Settings");
+    dialog.set_title(tr("Settings"));
     let page = adw::PreferencesPage::new();
 
     // Appearance
     let appearance = adw::PreferencesGroup::new();
-    appearance.set_title("Appearance");
+    appearance.set_title(tr("Appearance"));
     let labels: Vec<&str> = THEMES.iter().map(|t| t.label).collect();
     let index = THEMES
         .iter()
@@ -67,6 +69,26 @@ pub fn present(app: &Rc<App>) {
         app.apply_theme();
     });
     appearance.add(&theme);
+
+    const LANGUAGES: [(&str, &str); 3] = [
+        ("auto", "System Language"),
+        ("en", "English"),
+        ("tr", "Türkçe"),
+    ];
+    let labels: Vec<&str> = LANGUAGES.iter().map(|(_, l)| *l).collect();
+    let index = LANGUAGES
+        .iter()
+        .position(|(raw, _)| *raw == settings.language)
+        .unwrap_or(0);
+    let language = combo("Language", &labels, index);
+    language.set_subtitle(tr("Applies the next time omux opens."));
+    let weak = Rc::downgrade(app);
+    language.connect_selected_notify(move |row| {
+        let Some(app) = weak.upgrade() else { return };
+        let raw = LANGUAGES[row.selected() as usize].0.to_string();
+        app.update_settings(|s| s.language = raw);
+    });
+    appearance.add(&language);
 
     let mut families = vec!["System Mono".to_string()];
     families.extend(crate::ui::terminal::monospace_families(&app.ui.window));
@@ -89,7 +111,7 @@ pub fn present(app: &Rc<App>) {
     appearance.add(&font);
 
     let size = adw::SpinRow::with_range(9.0, 24.0, 1.0);
-    size.set_title("Font size");
+    size.set_title(tr("Font size"));
     size.set_value(settings.terminal_font_size());
     let weak = Rc::downgrade(app);
     size.connect_value_notify(move |row| {
@@ -103,7 +125,7 @@ pub fn present(app: &Rc<App>) {
 
     // Sidebar
     let sidebar = adw::PreferencesGroup::new();
-    sidebar.set_title("Sidebar");
+    sidebar.set_title(tr("Sidebar"));
     let folder = switch(
         "Show folder path under session name",
         None,
@@ -132,7 +154,7 @@ pub fn present(app: &Rc<App>) {
 
     // Files panel
     let files = adw::PreferencesGroup::new();
-    files.set_title("Files Panel");
+    files.set_title(tr("Files Panel"));
     let wrap = switch(
         "Wrap long lines in file preview",
         None,
@@ -147,7 +169,7 @@ pub fn present(app: &Rc<App>) {
 
     // Sessions
     let sessions = adw::PreferencesGroup::new();
-    sessions.set_title("Sessions");
+    sessions.set_title(tr("Sessions"));
     let resume = switch(
         "Auto-resume agent sessions at launch",
         Some("Off: restored sessions stay stopped until you press ▶. Clicking one only opens its shell."),
@@ -221,9 +243,9 @@ pub fn present(app: &Rc<App>) {
 
     // Notifications
     let notifications = adw::PreferencesGroup::new();
-    notifications.set_title("Notifications");
+    notifications.set_title(tr("Notifications"));
     notifications.set_description(Some(
-        "Shown while you're looking at another session or another app. Claude Code sends its own when its notification channel is ghostty (/config).",
+        tr("Shown while you're looking at another session or another app. Claude Code sends its own when its notification channel is ghostty (/config)."),
     ));
     let needs = switch("When a session needs you", None, settings.notify_needs_you);
     on_switch(app, &needs, |app, on| {
@@ -269,7 +291,7 @@ pub fn present(app: &Rc<App>) {
     let play = gtk::Button::from_icon_name("media-playback-start-symbolic");
     play.set_valign(gtk::Align::Center);
     play.add_css_class("flat");
-    play.set_tooltip_text(Some("Play"));
+    play.set_tooltip_text(Some(tr("Play")));
     let s = sound.clone();
     play.connect_clicked(move |_| play_sound(SOUNDS[s.selected() as usize].0));
     sound.add_suffix(&play);

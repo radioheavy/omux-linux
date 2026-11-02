@@ -9,6 +9,7 @@ use uuid::Uuid;
 use vte::prelude::*;
 
 use crate::app::App;
+use crate::i18n::tr;
 use crate::settings::Settings;
 use crate::term::SessionTerminal;
 use crate::theme::{rgba, Theme};
@@ -18,9 +19,9 @@ pub fn configure(app: &Rc<App>, id: Uuid, terminal: &Rc<SessionTerminal>) {
     terminal.widget.add_css_class("omux-terminal-bg");
 
     let menu = gio::Menu::new();
-    menu.append(Some("Copy"), Some("app.copy"));
-    menu.append(Some("Paste"), Some("app.paste"));
-    menu.append(Some("Select All"), Some("app.select-all"));
+    menu.append(Some(tr("Copy")), Some("app.copy"));
+    menu.append(Some(tr("Paste")), Some("app.paste"));
+    menu.append(Some(tr("Select All")), Some("app.select-all"));
     let popover = gtk::PopoverMenu::from_model(Some(&menu));
     popover.set_has_arrow(false);
     terminal.add_popover(popover.upcast_ref());

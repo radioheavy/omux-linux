@@ -10,6 +10,7 @@ use gtk::{gdk, gio, glib};
 use uuid::Uuid;
 
 use crate::app::App;
+use crate::i18n::tr;
 use crate::model::{TabColor, TabGroup, TabItem};
 use crate::runtime::{StatusColor, TabRuntime};
 
@@ -125,93 +126,99 @@ impl Sidebar {
         bar.set_title_widget(Some(&gtk::Box::new(gtk::Orientation::Horizontal, 0)));
         let menu = gio::Menu::new();
         let section = gio::Menu::new();
-        section.append(Some("New Project"), Some("app.new-project"));
-        section.append(Some("New Remote Project…"), Some("app.new-remote-project"));
-        section.append(Some("New Claude Code Session"), Some("app.new-claude"));
-        section.append(Some("New Codex Session"), Some("app.new-codex"));
-        section.append(Some("New Shell"), Some("app.new-shell"));
-        section.append(Some("New Session in Worktree…"), Some("app.new-worktree"));
+        section.append(Some(tr("New Project")), Some("app.new-project"));
+        section.append(
+            Some(tr("New Remote Project…")),
+            Some("app.new-remote-project"),
+        );
+        section.append(Some(tr("New Claude Code Session")), Some("app.new-claude"));
+        section.append(Some(tr("New Codex Session")), Some("app.new-codex"));
+        section.append(Some(tr("New Shell")), Some("app.new-shell"));
+        section.append(
+            Some(tr("New Session in Worktree…")),
+            Some("app.new-worktree"),
+        );
         menu.append_section(None, &section);
         let section = gio::Menu::new();
         let session = gio::Menu::new();
         for (label, action) in [
-            ("Rename", "app.rename"),
-            ("Edit Session…", "app.edit-session"),
-            ("Start or Continue Session", "app.start"),
-            ("Restart Session", "app.restart"),
-            ("Interrupt (Ctrl-C)", "app.interrupt"),
-            ("Kill Session", "app.kill"),
-            ("Close Session", "app.close-session"),
+            (tr("Rename"), "app.rename"),
+            (tr("Edit Session…"), "app.edit-session"),
+            (tr("Start or Continue Session"), "app.start"),
+            (tr("Restart Session"), "app.restart"),
+            (tr("Interrupt (Ctrl-C)"), "app.interrupt"),
+            (tr("Kill Session"), "app.kill"),
+            (tr("Close Session"), "app.close-session"),
         ] {
             session.append(Some(label), Some(action));
         }
-        section.append_submenu(Some("Session"), &session);
+        section.append_submenu(Some(tr("Session")), &session);
         let view = gio::Menu::new();
-        view.append(Some("Files Panel"), Some("app.toggle-panel"));
-        view.append(Some("Files"), Some("app.panel-tab::files"));
-        view.append(Some("Changes"), Some("app.panel-tab::changes"));
-        view.append(Some("Browser"), Some("app.panel-tab::browser"));
-        view.append(Some("Next Session"), Some("app.next-session"));
-        view.append(Some("Previous Session"), Some("app.prev-session"));
-        section.append_submenu(Some("View"), &view);
-        section.append(Some("Jump to Session…"), Some("app.quick-switch"));
-        section.append(Some("Search Conversations…"), Some("app.open-recent"));
+        view.append(Some(tr("Files Panel")), Some("app.toggle-panel"));
+        view.append(Some(tr("Files")), Some("app.panel-tab::files"));
+        view.append(Some(tr("Changes")), Some("app.panel-tab::changes"));
+        view.append(Some(tr("Browser")), Some("app.panel-tab::browser"));
+        view.append(Some(tr("Next Session")), Some("app.next-session"));
+        view.append(Some(tr("Previous Session")), Some("app.prev-session"));
+        section.append_submenu(Some(tr("View")), &view);
+        section.append(Some(tr("Jump to Session…")), Some("app.quick-switch"));
+        section.append(Some(tr("Search Conversations…")), Some("app.open-recent"));
         section.append(
-            Some("Import Claude Code Conversations"),
+            Some(tr("Import Claude Code Conversations")),
             Some("app.import-claude"),
         );
-        section.append(Some("Settings"), Some("app.settings"));
-        section.append(Some("Keyboard Shortcuts"), Some("app.shortcuts"));
-        section.append(Some("Welcome to omux…"), Some("app.welcome"));
-        section.append(Some("omux on GitHub"), Some("app.github"));
-        section.append(Some("About omux"), Some("app.about"));
+        section.append(Some(tr("Settings")), Some("app.settings"));
+        section.append(Some(tr("Keyboard Shortcuts")), Some("app.shortcuts"));
+        section.append(Some(tr("Welcome to omux…")), Some("app.welcome"));
+        section.append(Some(tr("omux on GitHub")), Some("app.github"));
+        section.append(Some(tr("About omux")), Some("app.about"));
         menu.append_section(None, &section);
         let section = gio::Menu::new();
-        section.append(Some("Close Window"), Some("app.close-window"));
-        section.append(Some("Quit"), Some("app.quit"));
+        section.append(Some(tr("Close Window")), Some("app.close-window"));
+        section.append(Some(tr("Quit")), Some("app.quit"));
         menu.append_section(None, &section);
         let menu_button = gtk::MenuButton::builder()
             .icon_name("open-menu-symbolic")
             .menu_model(&menu)
-            .tooltip_text("Main menu")
+            .tooltip_text(tr("Main menu"))
             .build();
         bar.pack_end(&menu_button);
         let sort = gio::Menu::new();
         let view = gio::Menu::new();
-        view.append(Some("Projects"), Some("app.sidebar-view::projects"));
+        view.append(Some(tr("Projects")), Some("app.sidebar-view::projects"));
         view.append(
-            Some("All Conversations, Latest First"),
+            Some(tr("All Conversations, Latest First")),
             Some("app.sidebar-view::recent"),
         );
-        sort.append_section(Some("Show"), &view);
+        sort.append_section(Some(tr("Show")), &view);
         let order = gio::Menu::new();
-        order.append(Some("Manual"), Some("app.project-order::manual"));
+        order.append(Some(tr("Manual")), Some("app.project-order::manual"));
         order.append(
-            Some("Latest Activity First"),
+            Some(tr("Latest Activity First")),
             Some("app.project-order::recent"),
         );
-        sort.append_section(Some("Order Projects"), &order);
+        sort.append_section(Some(tr("Order Projects")), &order);
         let sort_button = gtk::MenuButton::builder()
             .icon_name("view-sort-descending-symbolic")
             .menu_model(&sort)
-            .tooltip_text("Show and order sessions")
+            .tooltip_text(tr("Show and order sessions"))
             .build();
         bar.pack_end(&sort_button);
         for (icon, action, tip) in [
             (
                 "document-open-recent-symbolic",
                 "app.open-recent",
-                "Search conversations (Ctrl+Alt+O)",
+                tr("Search conversations (Ctrl+Alt+O)"),
             ),
             (
                 "folder-new-symbolic",
                 "app.open-folder",
-                "Open folder as a project (Ctrl+Shift+O)",
+                tr("Open folder as a project (Ctrl+Shift+O)"),
             ),
             (
                 "list-add-symbolic",
                 "app.new-session",
-                "New session in current project (Ctrl+Shift+T)",
+                tr("New session in current project (Ctrl+Shift+T)"),
             ),
         ] {
             let button = gtk::Button::from_icon_name(icon);
@@ -311,9 +318,9 @@ impl Sidebar {
                 "media-playback-start-symbolic"
             });
             row.start_stop.set_tooltip_text(Some(if busy {
-                "Interrupt (Ctrl-C)"
+                tr("Interrupt (Ctrl-C)")
             } else {
-                "Start or continue this session"
+                tr("Start or continue this session")
             }));
             row.trailing.set_visible_child_name("button");
         } else if rt.needs_attention {
@@ -332,7 +339,10 @@ fn secondary_line(app: &App, group: &TabGroup, tab: &TabItem, rt: &TabRuntime) -
     let show_folder = app.settings.borrow().show_folder_path;
     let mut parts = Vec::new();
     if let Some(seconds) = rt.closes_in {
-        parts.push(format!("Closes in {}:{:02}", seconds / 60, seconds % 60));
+        parts.push(crate::trf!(
+            "Closes in {time}",
+            time = format!("{}:{:02}", seconds / 60, seconds % 60)
+        ));
     }
     // Without project headers, each row names its project.
     if app.settings.borrow().sidebar_view == "recent" {
@@ -349,9 +359,9 @@ fn secondary_line(app: &App, group: &TabGroup, tab: &TabItem, rt: &TabRuntime) -
         let agents = crate::ui::agents::running_count(app, tab.id);
         if agents > 0 {
             parts.push(if agents == 1 {
-                "1 agent".to_string()
+                tr("1 agent").to_string()
             } else {
-                format!("{agents} agents")
+                crate::trf!("{agents} agents", agents = agents)
             });
         }
     }
@@ -510,8 +520,8 @@ fn fill_machines(app: &Rc<App>) {
     let sidebar = &app.ui.sidebar;
     let hosts = crate::remote::hosts(app);
     sidebar.machines.set_visible(!hosts.is_empty());
-    let mut wanted = vec![("all".to_string(), "All".to_string())];
-    wanted.push(("local".into(), "Local".into()));
+    let mut wanted = vec![("all".to_string(), tr("All").to_string())];
+    wanted.push(("local".into(), tr("Local").into()));
     wanted.extend(hosts.iter().map(|h| (h.clone(), format!("☁ {h}"))));
     let current = machine(app);
     // Reuse the buttons when the hosts are the same; just sync the state.
@@ -650,8 +660,8 @@ pub fn rebuild(app: &Rc<App>) {
 fn more_row(days: u32, hidden: usize) -> Option<gtk::ListBoxRow> {
     let label = match (hidden, next_days(days)) {
         (0, _) if days == 1 => return None,
-        (0, _) | (_, None) => "Show Today Only".to_string(),
-        (n, Some(_)) => format!("Load More ({n} older)"),
+        (0, _) | (_, None) => tr("Show Today Only").to_string(),
+        (n, Some(_)) => crate::trf!("Load More ({n} older)", n = n),
     };
     let row = gtk::ListBoxRow::new();
     row.set_widget_name("more");
@@ -737,7 +747,7 @@ fn group_row(app: &Rc<App>, group: &TabGroup) -> gtk::ListBoxRow {
     let add = gtk::Button::from_icon_name("list-add-symbolic");
     add.add_css_class("flat");
     add.add_css_class("circular");
-    add.set_tooltip_text(Some("New session"));
+    add.set_tooltip_text(Some(tr("New session")));
     add.set_opacity(0.0);
     add.set_action_name(Some("app.group-new-session"));
     add.set_action_target_value(Some(&group.id.to_string().to_variant()));
@@ -759,7 +769,7 @@ fn host_pill(host: &str) -> gtk::Label {
     let pill = gtk::Label::new(Some(&format!("☁ {host}")));
     pill.add_css_class("omux-pill");
     pill.set_valign(gtk::Align::Center);
-    pill.set_tooltip_text(Some(&format!("Runs on {host}")));
+    pill.set_tooltip_text(Some(&crate::trf!("Runs on {host}", host = host)));
     pill
 }
 
@@ -897,7 +907,7 @@ fn session_row(app: &Rc<App>, tab: &TabItem) -> SessionRow {
 pub fn permission_buttons(app: &Rc<App>, id: Uuid) -> gtk::Box {
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     hbox.set_visible(false);
-    for (label, allow) in [("Allow", true), ("Deny", false)] {
+    for (label, allow) in [(tr("Allow"), true), (tr("Deny"), false)] {
         let button = gtk::Button::with_label(label);
         button.add_css_class("omux-small");
         if allow {
@@ -913,7 +923,7 @@ pub fn permission_buttons(app: &Rc<App>, id: Uuid) -> gtk::Box {
     }
     let info = gtk::MenuButton::builder()
         .icon_name("dialog-information-symbolic")
-        .tooltip_text("What Codex asks for")
+        .tooltip_text(tr("What Codex asks for"))
         .build();
     info.add_css_class("flat");
     info.add_css_class("omux-small");
@@ -1208,19 +1218,19 @@ fn tab_menu(app: &Rc<App>, id: Uuid) -> gio::Menu {
     let menu = gio::Menu::new();
     let target = id.to_string();
     let top = gio::Menu::new();
-    item(&top, "Rename", "app.tab-rename", &target);
-    item(&top, "Edit Session…", "app.tab-edit", &target);
+    item(&top, tr("Rename"), "app.tab-rename", &target);
+    item(&top, tr("Edit Session…"), "app.tab-edit", &target);
     let colors = gio::Menu::new();
     // No "None": a session without a color gets one again.
     for color in TabColor::ALL.into_iter().skip(1) {
         item(
             &colors,
-            &color.label(),
+            tr(&color.label()),
             "app.tab-color",
             &format!("{id}:{}", color.raw()),
         );
     }
-    top.append_submenu(Some("Color"), &colors);
+    top.append_submenu(Some(tr("Color")), &colors);
     let groups = app.ws.borrow().groups.clone();
     if groups.len() > 1 {
         let move_to = gio::Menu::new();
@@ -1233,18 +1243,28 @@ fn tab_menu(app: &Rc<App>, id: Uuid) -> gio::Menu {
                 &format!("{id}:{}", group.id),
             );
         }
-        top.append_submenu(Some("Move to"), &move_to);
+        top.append_submenu(Some(tr("Move to")), &move_to);
     }
     menu.append_section(None, &top);
     if let Some(section) = crate::ui::worktree_actions::menu_section(app, id) {
         menu.append_section(None, &section);
     }
     let process = gio::Menu::new();
-    item(&process, "Open Terminal Here", "app.tab-terminal", &target);
-    item(&process, "Interrupt (Ctrl-C)", "app.tab-interrupt", &target);
-    item(&process, "Restart Session", "app.tab-restart", &target);
-    item(&process, "Kill Session", "app.tab-kill", &target);
-    item(&process, "Close Session", "app.tab-close", &target);
+    item(
+        &process,
+        tr("Open Terminal Here"),
+        "app.tab-terminal",
+        &target,
+    );
+    item(
+        &process,
+        tr("Interrupt (Ctrl-C)"),
+        "app.tab-interrupt",
+        &target,
+    );
+    item(&process, tr("Restart Session"), "app.tab-restart", &target);
+    item(&process, tr("Kill Session"), "app.tab-kill", &target);
+    item(&process, tr("Close Session"), "app.tab-close", &target);
     menu.append_section(None, &process);
     menu
 }
@@ -1253,14 +1273,14 @@ fn group_menu(app: &Rc<App>, group_id: Uuid) -> gio::Menu {
     let menu = gio::Menu::new();
     let target = group_id.to_string();
     let new = gio::Menu::new();
-    item(&new, "New Session", "app.group-new-session", &target);
+    item(&new, tr("New Session"), "app.group-new-session", &target);
     item(
         &new,
-        "New Session in Worktree…",
+        tr("New Session in Worktree…"),
         "app.group-new-worktree",
         &target,
     );
-    item(&new, "New Shell", "app.group-new-shell", &target);
+    item(&new, tr("New Shell"), "app.group-new-shell", &target);
     if let Some(host) = app
         .ws
         .borrow()
@@ -1271,28 +1291,28 @@ fn group_menu(app: &Rc<App>, group_id: Uuid) -> gio::Menu {
     {
         item(
             &new,
-            &format!("Import Conversations from {host}"),
+            &crate::trf!("Import Conversations from {host}", host = host),
             "app.import-remote",
             &host,
         );
     }
     menu.append_section(None, &new);
     let edit = gio::Menu::new();
-    item(&edit, "Rename", "app.group-rename", &target);
-    item(&edit, "Edit Project…", "app.group-edit", &target);
+    item(&edit, tr("Rename"), "app.group-rename", &target);
+    item(&edit, tr("Edit Project…"), "app.group-edit", &target);
     menu.append_section(None, &edit);
     let order = gio::Menu::new();
     let index = app.group_index(group_id).unwrap_or(0);
     let count = app.ws.borrow().groups.len();
     if index > 0 {
-        item(&order, "Move Up", "app.group-up", &target);
+        item(&order, tr("Move Up"), "app.group-up", &target);
     }
     if index + 1 < count {
-        item(&order, "Move Down", "app.group-down", &target);
+        item(&order, tr("Move Down"), "app.group-down", &target);
     }
     menu.append_section(None, &order);
     let delete = gio::Menu::new();
-    item(&delete, "Delete Project", "app.group-delete", &target);
+    item(&delete, tr("Delete Project"), "app.group-delete", &target);
     menu.append_section(None, &delete);
     menu
 }
@@ -1300,19 +1320,25 @@ fn group_menu(app: &Rc<App>, group_id: Uuid) -> gio::Menu {
 fn empty_menu() -> gio::Menu {
     let menu = gio::Menu::new();
     let top = gio::Menu::new();
-    top.append(Some("New Project"), Some("app.new-project"));
-    top.append(Some("Open Folder as Project…"), Some("app.open-folder"));
-    top.append(Some("New Remote Project…"), Some("app.new-remote-project"));
-    top.append(Some("Open Recent Conversation…"), Some("app.open-recent"));
+    top.append(Some(tr("New Project")), Some("app.new-project"));
+    top.append(Some(tr("Open Folder as Project…")), Some("app.open-folder"));
     top.append(
-        Some("Import Claude Code Conversations"),
+        Some(tr("New Remote Project…")),
+        Some("app.new-remote-project"),
+    );
+    top.append(
+        Some(tr("Open Recent Conversation…")),
+        Some("app.open-recent"),
+    );
+    top.append(
+        Some(tr("Import Claude Code Conversations")),
         Some("app.import-claude"),
     );
-    top.append(Some("New Codex Session"), Some("app.new-codex"));
+    top.append(Some(tr("New Codex Session")), Some("app.new-codex"));
     menu.append_section(None, &top);
     let bottom = gio::Menu::new();
-    bottom.append(Some("New Session"), Some("app.new-session"));
-    bottom.append(Some("New Shell"), Some("app.new-shell"));
+    bottom.append(Some(tr("New Session")), Some("app.new-session"));
+    bottom.append(Some(tr("New Shell")), Some("app.new-shell"));
     menu.append_section(None, &bottom);
     menu
 }

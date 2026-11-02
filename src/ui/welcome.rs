@@ -7,6 +7,7 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::app::App;
+use crate::i18n::tr;
 use crate::usage::Usage;
 
 thread_local! {
@@ -29,16 +30,16 @@ fn tool_path(tool: &str) -> Option<String> {
 
 pub fn present(app: &Rc<App>) {
     let dialog = adw::Dialog::new();
-    dialog.set_title("Welcome to omux");
+    dialog.set_title(tr("Welcome to omux"));
     dialog.set_content_width(520);
     dialog.set_content_height(600);
     let page = adw::PreferencesPage::new();
     page.set_description(
-        "A terminal for running many Claude Code and Codex sessions side by side. A few checks before you start.",
+        tr("A terminal for running many Claude Code and Codex sessions side by side. A few checks before you start."),
     );
 
     let agents = adw::PreferencesGroup::new();
-    agents.set_title("Agents");
+    agents.set_title(tr("Agents"));
     for (name, tool, install) in [
         (
             "Claude Code",
@@ -49,7 +50,7 @@ pub fn present(app: &Rc<App>) {
     ] {
         let row = adw::ActionRow::new();
         row.set_title(name);
-        row.set_subtitle("Checking…");
+        row.set_subtitle(tr("Checking…"));
         row.set_subtitle_selectable(true);
         agents.add(&row);
         let (tx, rx) = async_channel::bounded(1);
@@ -62,18 +63,23 @@ pub fn present(app: &Rc<App>) {
             let Ok(path) = rx.recv().await else { return };
             match path {
                 Some(path) => row.set_subtitle(&path),
-                None => row.set_subtitle(&format!("Not found. Install with: {install}")),
+                None => row.set_subtitle(&crate::trf!(
+                    "Not found. Install with: {install}",
+                    install = install
+                )),
             }
         });
     }
     page.add(&agents);
 
     let notifications = adw::PreferencesGroup::new();
-    notifications.set_title("Notifications");
+    notifications.set_title(tr("Notifications"));
     let row = adw::ActionRow::new();
-    row.set_title("Enabled");
-    row.set_subtitle("omux tells you when a session you aren't looking at needs you.");
-    let play = gtk::Button::with_label("Play the sound");
+    row.set_title(tr("Enabled"));
+    row.set_subtitle(tr(
+        "omux tells you when a session you aren't looking at needs you.",
+    ));
+    let play = gtk::Button::with_label(tr("Play the sound"));
     play.set_valign(gtk::Align::Center);
     let weak = Rc::downgrade(app);
     play.connect_clicked(move |_| {
@@ -86,11 +92,11 @@ pub fn present(app: &Rc<App>) {
     page.add(&notifications);
 
     let usage = adw::PreferencesGroup::new();
-    usage.set_title("Usage limits");
+    usage.set_title(tr("Usage limits"));
     let row = adw::ActionRow::new();
-    row.set_title("Claude plan limits");
+    row.set_title(tr("Claude plan limits"));
     set_usage(&row, crate::usage::claude());
-    let check = gtk::Button::with_label("Check now");
+    let check = gtk::Button::with_label(tr("Check now"));
     check.set_valign(gtk::Align::Center);
     let weak = Rc::downgrade(app);
     check.connect_clicked(move |_| {
@@ -102,17 +108,17 @@ pub fn present(app: &Rc<App>) {
     usage.add(&row);
     USAGE_ROW.with(|r| *r.borrow_mut() = Some(row.downgrade()));
     let codex = adw::ActionRow::new();
-    codex.set_title("Codex plan limits");
+    codex.set_title(tr("Codex plan limits"));
     set_usage(&codex, crate::codex::usage(app).0);
     usage.add(&codex);
     CODEX_ROW.with(|r| *r.borrow_mut() = Some(codex.downgrade()));
     page.add(&usage);
 
     let first = adw::PreferencesGroup::new();
-    first.set_title("First project");
+    first.set_title(tr("First project"));
     for (label, action) in [
-        ("Open a folder…", "app.open-folder"),
-        ("Recent conversations…", "app.open-recent"),
+        (tr("Open a folder…"), "app.open-folder"),
+        (tr("Recent conversations…"), "app.open-recent"),
     ] {
         let row = adw::ActionRow::new();
         row.set_title(label);
@@ -121,14 +127,14 @@ pub fn present(app: &Rc<App>) {
         row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
         first.add(&row);
     }
-    first.set_description(Some(
+    first.set_description(Some(tr(
         "Open this again from the main menu › Welcome to omux.",
-    ));
+    )));
     page.add(&first);
 
     let view = adw::ToolbarView::new();
     let bar = adw::HeaderBar::new();
-    let done = gtk::Button::with_label("Done");
+    let done = gtk::Button::with_label(tr("Done"));
     done.add_css_class("suggested-action");
     let d = dialog.downgrade();
     done.connect_clicked(move |_| {
@@ -148,7 +154,7 @@ fn set_usage(row: &adw::ActionRow, usage: Option<Usage>) {
     match usage {
         Some(Usage::Limits(limits)) => row.set_subtitle(&crate::usage::summary(&limits)),
         Some(Usage::Problem(_, long)) => row.set_subtitle(&long),
-        None => row.set_subtitle("Not checked yet"),
+        None => row.set_subtitle(tr("Not checked yet")),
     }
 }
 
