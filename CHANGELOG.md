@@ -1,6 +1,6 @@
 # Changelog (Linux)
 
-## Unreleased
+## 0.12.1
 
 - **Workflows in the Activity tab.** A session's workflow runs show up in Activity with their name, the phase they're in and how many agents run and are done. A running one lists its agents under it, phase by phase; click it to fold them. Pick the workflow for its summary, its phases at a glance and, once it ends, how long it took and the tokens it used; pick one of its agents to follow its transcript.
 - **Fixed omux flooding a remote host with SSH connections.** A subagent transcript in Activity kept being read after it left the screen, so each one opened added another reader; on a remote project this piled up thousands of connections until the host refused new ones. Transcripts now stop reading when closed and pause while hidden, and remote reads go one at a time over the shared connection.
