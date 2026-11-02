@@ -1,5 +1,10 @@
 # Changelog (Linux)
 
+## 0.11.0
+
+- **Today's sessions only.** The sidebar lists the sessions active today, and only the projects that have one. Load More at the bottom adds the last week, then the last month, then everything; Show Today Only goes back. The selected session, running ones and ones waiting for you always show.
+  - When a session was last active is saved, so remote sessions keep their place after a relaunch.
+
 ## 0.10.1
 
 - **Fixed a crash when a session closed.** Closing, stopping or idle-closing a session could quit omux.

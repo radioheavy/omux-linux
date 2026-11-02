@@ -83,6 +83,11 @@ fn tab_for(session: &RecentSession) -> TabItem {
     tab.claude_session_id = session.id;
     tab.provider = Some(SessionProvider::Claude);
     tab.command = Some(SessionProvider::Claude.command().to_string());
+    tab.last_active = session
+        .date
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs());
     tab
 }
 

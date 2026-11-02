@@ -198,6 +198,11 @@ pub struct TabItem {
     /// Set when the session runs in its own git worktree; `directory` is the worktree.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<Worktree>,
+    /// When the session last did something, in seconds since the epoch, so
+    /// the sidebar knows today's sessions after a relaunch (remote ones have
+    /// no transcript here).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_active: Option<u64>,
 }
 
 fn default_session_name() -> String {
@@ -216,6 +221,7 @@ impl TabItem {
             claude_session_id: Uuid::new_v4(),
             codex_thread_id: None,
             worktree: None,
+            last_active: None,
         }
     }
 

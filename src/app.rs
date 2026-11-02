@@ -697,7 +697,21 @@ impl App {
         let after = self.rt(id).status_state;
         if after != before {
             self.update_rt(id, |rt| rt.touched = Some(std::time::SystemTime::now()));
+            self.remember_activity(id);
             self.notify_status_change(id);
+        }
+    }
+
+    /// Saves when the session was last active, at most once a minute.
+    fn remember_activity(&self, id: Uuid) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let stale = self
+            .tab(id)
+            .is_some_and(|(_, t)| t.last_active.is_none_or(|a| now.saturating_sub(a) >= 60));
+        if stale {
+            self.update_tab(id, |t| t.last_active = Some(now));
         }
     }
 

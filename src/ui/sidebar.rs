@@ -1,7 +1,7 @@
 //! The sidebar: projects with their sessions, each with its live status.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -27,6 +27,30 @@ pub struct Sidebar {
     syncing: Cell<bool>,
     /// The rows as last built, to notice when the activity order changes.
     shown: RefCell<Vec<Uuid>>,
+    /// How far back sessions are listed: today, a week, a month or (0) all.
+    /// Load More steps through them.
+    days: Cell<u32>,
+}
+
+/// The steps of Load More, in days; 0 is everything.
+const DAY_STEPS: [u32; 4] = [1, 7, 30, 0];
+
+/// The next Load More step, or None when everything shows.
+fn next_days(days: u32) -> Option<u32> {
+    let at = DAY_STEPS.iter().position(|d| *d == days)?;
+    DAY_STEPS.get(at + 1).copied()
+}
+
+/// The start of the first day shown, in seconds since the epoch: local
+/// midnight today, or that many days back. None shows everything.
+fn since(days: u32) -> Option<u64> {
+    if days == 0 {
+        return None;
+    }
+    let now = glib::DateTime::now_local().ok()?;
+    let today = now.hour() * 3600 + now.minute() * 60 + now.second();
+    let start = now.to_unix() - i64::from(today) - i64::from(days - 1) * 86_400;
+    Some(start.max(0) as u64)
 }
 
 struct SessionRow {
@@ -230,6 +254,7 @@ impl Sidebar {
             hovered: Cell::new(None),
             syncing: Cell::new(false),
             shown: RefCell::new(Vec::new()),
+            days: Cell::new(1),
         }
     }
 
@@ -353,28 +378,57 @@ fn activity_times(app: &App) -> HashMap<Uuid, u64> {
             let transcript = transcripts.get(&tab.claude_session_id).copied();
             let seen = runtime.get(&tab.id).and_then(|rt| rt.touched);
             let time = transcript.max(seen).map_or(0, seconds);
-            (tab.id, time)
+            (tab.id, time.max(tab.last_active.unwrap_or(0)))
         })
         .collect()
 }
 
-/// The rows in display order. `recent` lists every session, latest activity
-/// first, with no project headers. Otherwise projects with their sessions,
-/// either in their saved order or, with `by_activity`, latest first. Ties
-/// keep the saved order.
+/// Which sessions the sidebar lists: those active since `since` (all when
+/// None), and always the ones in `keep` (selected, running, needing you).
+pub struct Filter<'a> {
+    pub since: Option<u64>,
+    pub keep: &'a HashSet<Uuid>,
+}
+
+/// The rows in display order, and how many sessions the filter hid.
+/// `recent` lists every session, latest activity first, with no project
+/// headers. Otherwise projects with their sessions, either in their saved
+/// order or, with `by_activity`, latest first. Ties keep the saved order.
+/// A project whose sessions are all hidden is hidden too.
 pub fn layout(
     groups: &[TabGroup],
     times: &HashMap<Uuid, u64>,
     recent: bool,
     by_activity: bool,
-) -> Vec<Item> {
+    filter: &Filter,
+) -> (Vec<Item>, usize) {
     let time = |tab: &TabItem| times.get(&tab.id).copied().unwrap_or(0);
+    let listed = |tab: &TabItem| {
+        filter.since.is_none_or(|s| time(tab) >= s) || filter.keep.contains(&tab.id)
+    };
+    let total: usize = groups.iter().map(|g| g.tabs.len()).sum();
     if recent {
-        let mut tabs: Vec<&TabItem> = groups.iter().flat_map(|g| g.tabs.iter()).collect();
+        let mut tabs: Vec<&TabItem> = groups
+            .iter()
+            .flat_map(|g| g.tabs.iter())
+            .filter(|t| listed(t))
+            .collect();
         tabs.sort_by_key(|t| std::cmp::Reverse(time(t)));
-        return tabs.into_iter().map(|t| Item::Tab(t.clone())).collect();
+        let hidden = total - tabs.len();
+        return (
+            tabs.into_iter().map(|t| Item::Tab(t.clone())).collect(),
+            hidden,
+        );
     }
-    let mut groups = groups.to_vec();
+    let mut groups: Vec<TabGroup> = groups
+        .iter()
+        .filter_map(|g| {
+            let mut group = g.clone();
+            group.tabs.retain(|t| listed(t));
+            (!group.tabs.is_empty() || g.tabs.is_empty()).then_some(group)
+        })
+        .collect();
+    let hidden = total - groups.iter().map(|g| g.tabs.len()).sum::<usize>();
     if by_activity {
         for group in &mut groups {
             group.tabs.sort_by_key(|t| std::cmp::Reverse(time(t)));
@@ -391,7 +445,21 @@ pub fn layout(
         items.push(Item::Group(group));
         items.extend(tabs.into_iter().map(Item::Tab));
     }
-    items
+    (items, hidden)
+}
+
+/// Sessions that show whatever their age: the selected one, running ones
+/// and ones waiting for the user.
+fn always_listed(app: &App) -> HashSet<Uuid> {
+    let terminals = app.terminals.borrow();
+    let runtime = app.runtime.borrow();
+    let mut keep: HashSet<Uuid> = runtime
+        .iter()
+        .filter(|(id, rt)| rt.needs_attention || (terminals.contains_key(id) && !rt.exited))
+        .map(|(id, _)| *id)
+        .collect();
+    keep.extend(app.selected.get());
+    keep
 }
 
 /// The machine tab in effect: `all` when there are no remote projects or
@@ -489,7 +557,9 @@ fn fill_machines(app: &Rc<App>) {
     }
 }
 
-fn current_layout(app: &App) -> Vec<Item> {
+/// The sidebar's rows and the number of sessions Load More would add.
+/// With `expand`, collapsed projects list their sessions too.
+fn current_layout(app: &App, expand: bool) -> (Vec<Item>, usize) {
     let (recent, by_activity) = {
         let settings = app.settings.borrow();
         (
@@ -497,29 +567,28 @@ fn current_layout(app: &App) -> Vec<Item> {
             settings.project_order == "recent",
         )
     };
-    let times = if recent || by_activity {
+    let since = since(app.ui.sidebar.days.get());
+    let times = if recent || by_activity || since.is_some() {
         activity_times(app)
     } else {
         HashMap::new()
     };
-    layout(&visible_groups(app), &times, recent, by_activity)
+    let keep = always_listed(app);
+    let mut groups = visible_groups(app);
+    if expand {
+        for group in &mut groups {
+            group.is_collapsed = false;
+        }
+    }
+    let filter = Filter { since, keep: &keep };
+    layout(&groups, &times, recent, by_activity, &filter)
 }
 
 /// Sessions in the order the sidebar shows them, collapsed ones included,
 /// for next / previous session.
 pub fn tab_order(app: &App) -> Vec<Uuid> {
-    let recent = app.settings.borrow().sidebar_view == "recent";
-    let by_activity = app.settings.borrow().project_order == "recent";
-    let times = if recent || by_activity {
-        activity_times(app)
-    } else {
-        HashMap::new()
-    };
-    let mut groups = visible_groups(app);
-    for group in &mut groups {
-        group.is_collapsed = false;
-    }
-    layout(&groups, &times, recent, by_activity)
+    current_layout(app, true)
+        .0
         .into_iter()
         .filter_map(|item| match item {
             Item::Tab(t) => Some(t.id),
@@ -534,7 +603,7 @@ pub fn rebuild(app: &Rc<App>) {
     sidebar.syncing.set(true);
     sidebar.list.remove_all();
     sidebar.rows.borrow_mut().clear();
-    let items = current_layout(app);
+    let (items, hidden) = current_layout(app, false);
     *sidebar.shown.borrow_mut() = items.iter().map(Item::id).collect();
     for item in &items {
         match item {
@@ -546,6 +615,9 @@ pub fn rebuild(app: &Rc<App>) {
             }
         }
     }
+    if let Some(row) = more_row(sidebar.days.get(), hidden) {
+        sidebar.list.append(&row);
+    }
     sidebar.syncing.set(false);
     let ids: Vec<Uuid> = sidebar.rows.borrow().keys().copied().collect();
     for id in ids {
@@ -554,13 +626,36 @@ pub fn rebuild(app: &Rc<App>) {
     sidebar.select_row(app.selected.get());
 }
 
-/// Moves rows when the activity order changes, unless the user is in the
-/// middle of something in the sidebar (renaming, hovering a row).
+/// Load More at the end of the list, or Show Today Only once everything
+/// older is listed.
+fn more_row(days: u32, hidden: usize) -> Option<gtk::ListBoxRow> {
+    let label = match (hidden, next_days(days)) {
+        (0, _) if days == 1 => return None,
+        (0, _) | (_, None) => "Show Today Only".to_string(),
+        (n, Some(_)) => format!("Load More ({n} older)"),
+    };
+    let row = gtk::ListBoxRow::new();
+    row.set_widget_name("more");
+    row.set_selectable(false);
+    let label = gtk::Label::new(Some(&label));
+    label.add_css_class("dim-label");
+    label.add_css_class("omux-provider");
+    label.set_margin_top(8);
+    label.set_margin_bottom(8);
+    row.set_child(Some(&label));
+    Some(row)
+}
+
+/// Moves rows when the activity order changes, or a session becomes active
+/// or a new day starts, unless the user is in the middle of something in
+/// the sidebar (renaming, hovering a row).
 fn resort_if_needed(app: &Rc<App>) {
     let sidebar = &app.ui.sidebar;
     let sorted = {
         let settings = app.settings.borrow();
-        settings.sidebar_view == "recent" || settings.project_order == "recent"
+        settings.sidebar_view == "recent"
+            || settings.project_order == "recent"
+            || sidebar.days.get() != 0
     };
     if !sorted
         || app.renaming.get().is_some()
@@ -569,7 +664,7 @@ fn resort_if_needed(app: &Rc<App>) {
     {
         return;
     }
-    let ids: Vec<Uuid> = current_layout(app).iter().map(Item::id).collect();
+    let ids: Vec<Uuid> = current_layout(app, false).0.iter().map(Item::id).collect();
     if *sidebar.shown.borrow() != ids {
         rebuild(app);
     }
@@ -916,6 +1011,35 @@ pub fn connect(app: &Rc<App>) {
             return;
         }
         let name = row.widget_name();
+        if name == "more" {
+            let sidebar = &app.ui.sidebar;
+            let days = sidebar.days.get();
+            let hidden = current_layout(&app, false).1;
+            // Nothing older left: back to today.
+            let mut next = if hidden == 0 {
+                1
+            } else {
+                next_days(days).unwrap_or(1)
+            };
+            // Skip a step that adds nothing (nothing from this week, but
+            // some from this month).
+            while next != 0 && next != 1 {
+                sidebar.days.set(next);
+                if current_layout(&app, false).1 < hidden {
+                    break;
+                }
+                next = next_days(next).unwrap_or(0);
+            }
+            sidebar.days.set(next);
+            // Not from inside the row's own signal: rebuilding removes it.
+            let weak = Rc::downgrade(&app);
+            glib::idle_add_local_once(move || {
+                if let Some(app) = weak.upgrade() {
+                    app.refresh_sidebar();
+                }
+            });
+            return;
+        }
         let Some((kind, id)) = name.split_once(':') else {
             return;
         };
@@ -1210,17 +1334,60 @@ mod tests {
             .map(|(n, t)| (Uuid::from_u128(n), t))
             .collect();
 
+        let none = HashSet::new();
+        let all = Filter {
+            since: None,
+            keep: &none,
+        };
         assert_eq!(
-            names(&layout(&groups, &times, false, false)),
+            names(&layout(&groups, &times, false, false, &all).0),
             ["a", "t1", "t2", "b", "t3", "t4", "c"]
         );
         assert_eq!(
-            names(&layout(&groups, &times, false, true)),
+            names(&layout(&groups, &times, false, true, &all).0),
             ["b", "t4", "t3", "a", "t1", "t2", "c"]
         );
         assert_eq!(
-            names(&layout(&groups, &times, true, false)),
+            names(&layout(&groups, &times, true, false, &all).0),
             ["t4", "t1", "t5", "t2", "t3"]
         );
+    }
+
+    #[test]
+    fn only_recent_sessions() {
+        let groups = vec![group("a", &[1, 2]), group("b", &[3]), group("empty", &[])];
+        let times: HashMap<Uuid, u64> = [(1, 100), (2, 10), (3, 5)]
+            .into_iter()
+            .map(|(n, t)| (Uuid::from_u128(n), t))
+            .collect();
+        let none = HashSet::new();
+        let today = Filter {
+            since: Some(50),
+            keep: &none,
+        };
+        // b has nothing recent and goes; an empty project stays.
+        let (items, hidden) = layout(&groups, &times, false, false, &today);
+        assert_eq!(names(&items), ["a", "t1", "empty"]);
+        assert_eq!(hidden, 2);
+        let (items, hidden) = layout(&groups, &times, true, false, &today);
+        assert_eq!(names(&items), ["t1"]);
+        assert_eq!(hidden, 2);
+        // The selected or a running session shows whatever its age.
+        let keep: HashSet<Uuid> = [Uuid::from_u128(3)].into_iter().collect();
+        let kept = Filter {
+            since: Some(50),
+            keep: &keep,
+        };
+        let (items, hidden) = layout(&groups, &times, false, false, &kept);
+        assert_eq!(names(&items), ["a", "t1", "b", "t3", "empty"]);
+        assert_eq!(hidden, 1);
+    }
+
+    #[test]
+    fn load_more_steps() {
+        assert_eq!(next_days(1), Some(7));
+        assert_eq!(next_days(7), Some(30));
+        assert_eq!(next_days(30), Some(0));
+        assert_eq!(next_days(0), None);
     }
 }
