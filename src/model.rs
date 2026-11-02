@@ -104,6 +104,22 @@ pub enum TabColor {
 }
 
 impl TabColor {
+    /// The colors new sessions get, in turn, so neighbors differ.
+    pub const AUTO: [TabColor; 12] = [
+        Self::Blue,
+        Self::Orange,
+        Self::Green,
+        Self::Purple,
+        Self::Pink,
+        Self::Teal,
+        Self::Yellow,
+        Self::Red,
+        Self::Indigo,
+        Self::Mint,
+        Self::Cyan,
+        Self::Brown,
+    ];
+
     pub const ALL: [TabColor; 14] = [
         Self::None,
         Self::Red,
@@ -386,8 +402,48 @@ mod upper_uuid_option {
     }
 }
 
+/// Gives every session without a color the least used one, so each has
+/// its own and keeps it. Returns whether anything changed.
+pub fn assign_colors(ws: &mut Workspace) -> bool {
+    let mut counts = [0usize; TabColor::AUTO.len()];
+    for tab in ws.groups.iter().flat_map(|g| g.tabs.iter()) {
+        if let Some(i) = TabColor::AUTO.iter().position(|c| *c == tab.color) {
+            counts[i] += 1;
+        }
+    }
+    let mut changed = false;
+    for tab in ws.groups.iter_mut().flat_map(|g| g.tabs.iter_mut()) {
+        if tab.color != TabColor::None {
+            continue;
+        }
+        let (i, _) = counts
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, n)| **n)
+            .expect("colors");
+        tab.color = TabColor::AUTO[i];
+        counts[i] += 1;
+        changed = true;
+    }
+    changed
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn colors_are_assigned_in_turn() {
+        let tabs = (0..3).map(|n| TabItem::new(format!("t{n}"))).collect();
+        let mut ws = Workspace {
+            groups: vec![TabGroup::new("a", None, tabs)],
+            selected_tab_id: None,
+        };
+        ws.groups[0].tabs[1].color = TabColor::Blue;
+        assert!(assign_colors(&mut ws));
+        let colors: Vec<TabColor> = ws.groups[0].tabs.iter().map(|t| t.color).collect();
+        assert_eq!(colors, [TabColor::Orange, TabColor::Blue, TabColor::Green]);
+        assert!(!assign_colors(&mut ws));
+    }
+
     use super::*;
 
     #[test]

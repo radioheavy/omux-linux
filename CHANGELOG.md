@@ -1,5 +1,9 @@
 # Changelog (Linux)
 
+## 0.12.0
+
+- **Every session has its own color.** A session gets a color when it's created, the least used one so neighbors differ, and keeps it. The color fills its row in the sidebar; right-click › Color changes it. The dot now shows only the status (working, needs you, done).
+
 ## 0.11.0
 
 - **Today's sessions only.** The sidebar lists the sessions active today, and only the projects that have one. Load More at the bottom adds the last week, then the last month, then everything; Show Today Only goes back. The selected session, running ones and ones waiting for you always show.

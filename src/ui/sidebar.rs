@@ -88,6 +88,16 @@ pub fn status_class(color: StatusColor) -> &'static str {
     }
 }
 
+/// Fills a session row with its color.
+fn set_tint(row: &gtk::ListBoxRow, color: TabColor) {
+    for c in TabColor::ALL {
+        row.remove_css_class(&format!("omux-tint-{}", c.raw()));
+    }
+    if color != TabColor::None {
+        row.add_css_class(&format!("omux-tint-{}", color.raw()));
+    }
+}
+
 /// Status color, else the session's color, else neutral.
 pub fn dot_color(rt: &TabRuntime, tab: &TabItem) -> Option<&'static str> {
     rt.status_color()
@@ -274,7 +284,12 @@ impl Sidebar {
             return;
         };
         let rt = app.rt(id);
-        set_dot(&row.dot, dot_color(&rt, &tab));
+        // The row wears the session's color; the dot only shows status.
+        let status = rt.status_color().map(status_class);
+        set_dot(&row.dot, status);
+        row.dot
+            .set_opacity(if status.is_some() { 1.0 } else { 0.0 });
+        set_tint(&row.row, tab.color);
         row.name.set_text(&tab.name);
         row.status.set_text(&secondary_line(app, &group, &tab, &rt));
         row.status.set_visible(!row.status.text().is_empty());
@@ -598,6 +613,10 @@ pub fn tab_order(app: &App) -> Vec<Uuid> {
 }
 
 pub fn rebuild(app: &Rc<App>) {
+    let colored = crate::model::assign_colors(&mut app.ws.borrow_mut());
+    if colored {
+        app.schedule_save();
+    }
     fill_machines(app);
     let sidebar = &app.ui.sidebar;
     sidebar.syncing.set(true);
@@ -1192,7 +1211,8 @@ fn tab_menu(app: &Rc<App>, id: Uuid) -> gio::Menu {
     item(&top, "Rename", "app.tab-rename", &target);
     item(&top, "Edit Session…", "app.tab-edit", &target);
     let colors = gio::Menu::new();
-    for color in TabColor::ALL {
+    // No "None": a session without a color gets one again.
+    for color in TabColor::ALL.into_iter().skip(1) {
         item(
             &colors,
             &color.label(),
