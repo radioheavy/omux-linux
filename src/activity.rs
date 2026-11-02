@@ -27,6 +27,43 @@ pub struct Agent {
     /// Its transcript.
     pub path: String,
     pub modified: f64,
+    /// The workflow phase it runs in, for a workflow's agent.
+    #[serde(default)]
+    pub phase: Option<String>,
+}
+
+/// A workflow run: a script that starts agents in phases.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Workflow {
+    pub id: String,
+    pub name: String,
+    pub summary: String,
+    /// `running`, `completed`, `failed`, `killed`…
+    pub status: String,
+    pub phases: Vec<String>,
+    /// In the order they started.
+    pub agents: Vec<Agent>,
+    pub modified: f64,
+    pub duration_ms: Option<u64>,
+    pub tokens: Option<u64>,
+    pub tool_calls: Option<u64>,
+    pub error: Option<String>,
+}
+
+impl Workflow {
+    pub fn running(&self) -> bool {
+        self.status == "running"
+    }
+
+    /// The phase its newest agent runs in.
+    pub fn current_phase(&self) -> Option<&str> {
+        self.agents
+            .iter()
+            .rev()
+            .find(|a| !a.finished)
+            .or(self.agents.last())
+            .and_then(|a| a.phase.as_deref())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -51,10 +88,27 @@ impl Shell {
 pub struct Snapshot {
     pub agents: Vec<Agent>,
     pub shells: Vec<Shell>,
+    #[serde(default)]
+    pub workflows: Vec<Workflow>,
 }
+
+impl Snapshot {
+    /// An agent of the session or of one of its workflows.
+    pub fn agent(&self, id: &str) -> Option<&Agent> {
+        self.agents
+            .iter()
+            .chain(self.workflows.iter().flat_map(|w| &w.agents))
+            .find(|a| a.id == id)
+    }
+}
+
+/// Remote reads go one at a time: they share one SSH connection, and
+/// many at once would each open their own while it's being set up.
+static REMOTE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// `python3 - args…` here or on `host`, with the probe on stdin.
 fn probe(host: Option<&str>, args: &[&str]) -> Result<Vec<u8>, String> {
+    let _one = host.map(|_| REMOTE.lock().unwrap_or_else(|e| e.into_inner()));
     let mut command = match host {
         Some(host) => {
             let mut c = Command::new("ssh");
@@ -264,6 +318,38 @@ mod tests {
         )
         .unwrap();
 
+        let run = project
+            .join(&id)
+            .join("subagents")
+            .join("workflows")
+            .join("wf_1");
+        std::fs::create_dir_all(&run).unwrap();
+        std::fs::write(
+            run.join("journal.jsonl"),
+            "{\"type\":\"launched\"}\n{\"type\":\"started\",\"agentId\":\"w1\"}\n{\"type\":\"result\",\"agentId\":\"w1\"}\n{\"type\":\"started\",\"agentId\":\"w2\"}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            run.join("agent-w1.meta.json"),
+            r#"{"agentType": "workflow-subagent", "description": "map", "workflowPhase": "Understand"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            run.join("agent-w2.meta.json"),
+            r#"{"agentType": "workflow-subagent", "description": "build", "workflowPhase": "Build"}"#,
+        )
+        .unwrap();
+        std::fs::write(run.join("agent-w2.jsonl"), "").unwrap();
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(project.join(format!("{id}.jsonl")))
+            .unwrap();
+        let launch = serde_json::json!({"type": "user", "toolUseResult": {"status": "async_launched",
+            "taskId": "x1", "taskType": "local_workflow", "workflowName": "night-build",
+            "runId": "wf_1", "summary": "Build it"}, "message": {"content": "ok"}});
+        writeln!(file, "{launch}").unwrap();
+        drop(file);
+
         let mut child = Command::new("python3")
             .args(["-", "snapshot", &id])
             .env("CLAUDE_CONFIG_DIR", &base)
@@ -290,6 +376,20 @@ mod tests {
         assert_eq!(agent.kind, "Explore");
         assert_eq!(agent.activity.as_deref(), Some("Grep panic"));
         assert_eq!(agent.tools, 1);
+        assert_eq!(snapshot.workflows.len(), 1);
+        let workflow = &snapshot.workflows[0];
+        assert_eq!(workflow.name, "night-build");
+        assert_eq!(workflow.summary, "Build it");
+        assert!(workflow.running());
+        assert_eq!(workflow.phases, ["Understand", "Build"]);
+        assert_eq!(workflow.agents.len(), 2);
+        assert!(workflow.agents[0].finished);
+        assert!(!workflow.agents[1].finished);
+        assert_eq!(workflow.current_phase(), Some("Build"));
+        assert_eq!(
+            snapshot.agent("agent-w2").map(|a| a.description.as_str()),
+            Some("build")
+        );
         std::fs::remove_dir_all(&base).unwrap();
     }
 }

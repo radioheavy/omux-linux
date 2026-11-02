@@ -72,20 +72,9 @@ def snapshot(session):
             continue
         if not finished and now - changed > 1800:
             continue
-        tool, count = last_tool(transcript)
-        result["agents"].append({
-            "id": os.path.basename(transcript)[:-6],
-            "kind": meta.get("agentType") or "agent",
-            "description": meta.get("description") or "",
-            "finished": finished,
-            "background": meta.get("requestShape") == "background",
-            "activity": tool,
-            "tools": count,
-            "path": transcript,
-            "modified": changed,
-        })
+        result["agents"].append(agent(transcript, meta, finished, changed))
 
-    uses, tasks, status = {}, {}, {}
+    uses, tasks, status, launches = {}, {}, {}, {}
     try:
         size = os.path.getsize(path)
         with open(path, "rb") as f:
@@ -94,7 +83,7 @@ def snapshot(session):
                 f.readline()
             for raw in f:
                 if b"run_in_background" not in raw and b"backgroundTaskId" not in raw \
-                        and b"<task-id>" not in raw:
+                        and b"<task-id>" not in raw and b"local_workflow" not in raw:
                     continue
                 text = raw.decode("utf-8", "replace")
                 for m in re.finditer(r"<task-id>(\w+)</task-id>.*?<status>(\w+)</status>", text, re.S):
@@ -103,6 +92,10 @@ def snapshot(session):
                     row = json.loads(raw)
                 except ValueError:
                     continue
+                extra = row.get("toolUseResult")
+                if isinstance(extra, dict) and extra.get("taskType") == "local_workflow" \
+                        and extra.get("runId"):
+                    launches[extra["runId"]] = extra
                 content = (row.get("message") or {}).get("content")
                 if not isinstance(content, list):
                     continue
@@ -142,7 +135,91 @@ def snapshot(session):
             "output": output,
             "modified": changed,
         })
+    result["workflows"] = workflows(path[:-6], launches, status, session_active)
     return result
+
+
+def agent(transcript, meta, finished, changed, phase=None):
+    tool, count = last_tool(transcript) if not finished or now - changed < 600 else (None, 0)
+    return {
+        "id": os.path.basename(transcript)[:-6],
+        "kind": meta.get("agentType") or "agent",
+        "description": meta.get("description") or "",
+        "finished": finished,
+        "background": meta.get("requestShape") == "background",
+        "activity": tool,
+        "tools": count,
+        "path": transcript,
+        "modified": changed,
+        "phase": phase,
+    }
+
+
+def workflows(folder, launches, status, session_active):
+    """The session's workflow runs, each with its agents in start order."""
+    found = []
+    for run in glob.glob(os.path.join(folder, "subagents", "workflows", "wf_*")):
+        run_id = os.path.basename(run)
+        journal = os.path.join(run, "journal.jsonl")
+        final = {}
+        final_path = os.path.join(folder, "workflows", run_id + ".json")
+        if os.path.exists(final_path):
+            try:
+                final = json.load(open(final_path))
+            except (OSError, ValueError):
+                final = {}
+        launch = launches.get(run_id) or {}
+        changed = max(mtime(journal), mtime(run), mtime(final_path))
+        state = final.get("status") or status.get(launch.get("taskId") or "") or "running"
+        if state == "running" and (not session_active or now - changed > 3600):
+            continue
+        if state != "running" and now - changed > 900:
+            continue
+        order, done = [], set()
+        try:
+            for raw in open(journal, "rb"):
+                try:
+                    row = json.loads(raw)
+                except ValueError:
+                    continue
+                aid = row.get("agentId")
+                if not aid:
+                    continue
+                if row.get("type") == "started" and aid not in order:
+                    order.append(aid)
+                elif row.get("type") == "result":
+                    done.add(aid)
+        except OSError:
+            pass
+        agents, phases = [], [p.get("title") for p in final.get("phases") or [] if p.get("title")]
+        for aid in order:
+            transcript = os.path.join(run, "agent-" + aid + ".jsonl")
+            meta_path = os.path.join(run, "agent-" + aid + ".meta.json")
+            try:
+                meta = json.load(open(meta_path))
+            except (OSError, ValueError):
+                meta = {}
+            phase = meta.get("workflowPhase")
+            if phase and phase not in phases:
+                phases.append(phase)
+            finished = aid in done or state != "running"
+            agents.append(agent(transcript, meta, finished,
+                                max(mtime(meta_path), mtime(transcript)), phase))
+        error = final.get("error")
+        found.append({
+            "id": run_id,
+            "name": final.get("workflowName") or launch.get("workflowName") or run_id,
+            "summary": final.get("summary") or launch.get("summary") or "",
+            "status": state,
+            "phases": phases,
+            "agents": agents,
+            "modified": changed,
+            "duration_ms": final.get("durationMs"),
+            "tokens": final.get("totalTokens"),
+            "tool_calls": final.get("totalToolCalls"),
+            "error": error.splitlines()[0] if isinstance(error, str) and error else None,
+        })
+    return found
 
 
 def tail(path, offset):

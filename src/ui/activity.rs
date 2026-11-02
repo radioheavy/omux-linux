@@ -1,9 +1,10 @@
 //! The Activity tab: what the selected Claude Code session runs in the
-//! background (subagents and background shells), live, on this computer or
+//! background (subagents, workflows and background shells), live, on this computer or
 //! its SSH host. The list follows the newest running item until you pick
 //! one; the pane below streams it.
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -12,7 +13,7 @@ use adw::prelude::*;
 use gtk::glib;
 use uuid::Uuid;
 
-use crate::activity::{Agent, JsonlTail, Shell, Snapshot};
+use crate::activity::{Agent, JsonlTail, Shell, Snapshot, Workflow};
 use crate::app::App;
 use crate::i18n::tr;
 use crate::model::SessionProvider;
@@ -28,8 +29,10 @@ struct State {
     /// The session shown, and its host.
     session: Option<Uuid>,
     snapshot: Snapshot,
-    /// `agent:<id>` or `shell:<id>`.
+    /// `agent:<id>`, `shell:<id>` or `workflow:<id>`.
     chosen: Option<String>,
+    /// Workflows opened or closed by hand; a running one starts open.
+    toggled: HashSet<String>,
     picked: bool,
     detail: Option<String>,
     busy: bool,
@@ -81,11 +84,20 @@ pub fn build(app: &Rc<App>) -> gtk::Widget {
     list.connect_row_activated(move |_, row| {
         let Some(app) = weak.upgrade() else { return };
         let key = row.widget_name().to_string();
+        let workflow = key.starts_with("workflow:");
         with(|s| {
+            if workflow && !s.toggled.remove(&key) {
+                s.toggled.insert(key.clone());
+            }
             s.chosen = Some(key);
             s.picked = true;
         });
-        show_detail(&app);
+        if workflow {
+            // Shows or hides its agents.
+            render(&app);
+        } else {
+            show_detail(&app);
+        }
     });
 
     STATE.with(|s| {
@@ -97,6 +109,7 @@ pub fn build(app: &Rc<App>) -> gtk::Widget {
             session: None,
             snapshot: Snapshot::default(),
             chosen: None,
+            toggled: HashSet::new(),
             picked: false,
             detail: None,
             busy: false,
@@ -138,6 +151,7 @@ pub fn selection_changed(app: &Rc<App>) {
             s.session = id;
             s.snapshot = Snapshot::default();
             s.chosen = None;
+            s.toggled.clear();
             s.picked = false;
             s.detail = None;
         }
@@ -225,6 +239,8 @@ struct Item {
     color: &'static str,
     running: bool,
     modified: f64,
+    /// A workflow's agent, listed under it.
+    nested: bool,
 }
 
 fn agent_item(a: &Agent) -> Item {
@@ -242,21 +258,16 @@ fn agent_item(a: &Agent) -> Item {
         } else {
             a.description.clone()
         },
-        detail: format!("{} · {state}", a.kind),
+        detail: format!("{} · {state}", a.phase.as_deref().unwrap_or(&a.kind)),
         color: if a.finished { "green" } else { "blue" },
         running: !a.finished,
         modified: a.modified,
+        nested: a.phase.is_some(),
     }
 }
 
 fn shell_item(sh: &Shell) -> Item {
-    let state = match sh.status.as_str() {
-        "running" => tr("Running…"),
-        "completed" => tr("Done"),
-        "failed" => tr("Failed"),
-        "killed" => tr("Stopped"),
-        other => other,
-    };
+    let state = state_name(&sh.status);
     Item {
         key: format!("shell:{}", sh.id),
         title: if sh.description.is_empty() {
@@ -272,7 +283,93 @@ fn shell_item(sh: &Shell) -> Item {
         },
         running: sh.running(),
         modified: sh.modified,
+        nested: false,
     }
+}
+
+fn state_name(status: &str) -> &str {
+    match status {
+        "running" => tr("Running…"),
+        "completed" => tr("Done"),
+        "failed" => tr("Failed"),
+        "killed" => tr("Stopped"),
+        other => other,
+    }
+}
+
+fn workflow_item(w: &Workflow, open: bool) -> Item {
+    let running = w.agents.iter().filter(|a| !a.finished).count();
+    let done = w.agents.len() - running;
+    let detail = if w.running() {
+        let mut parts = Vec::new();
+        if let Some(phase) = w.current_phase() {
+            let n = w
+                .phases
+                .iter()
+                .position(|p| p == phase)
+                .map_or(0, |i| i + 1);
+            parts.push(if n > 0 && w.phases.len() > 1 {
+                crate::trf!(
+                    "{phase} ({n}/{total})",
+                    phase = phase,
+                    n = n,
+                    total = w.phases.len()
+                )
+            } else {
+                phase.to_string()
+            });
+        }
+        parts.push(crate::trf!("{n} running", n = running));
+        parts.push(crate::trf!("{n} done", n = done));
+        parts.join(" · ")
+    } else {
+        let mut parts = vec![
+            state_name(&w.status).to_string(),
+            crate::trf!("{n} agents", n = w.agents.len()),
+        ];
+        if let Some(ms) = w.duration_ms {
+            parts.push(duration(ms));
+        }
+        parts.join(" · ")
+    };
+    Item {
+        key: format!("workflow:{}", w.id),
+        title: format!("{} {}", if open { "▾" } else { "▸" }, w.name),
+        detail: format!("{} · {detail}", tr("Workflow")),
+        color: match w.status.as_str() {
+            "running" => "purple",
+            "completed" => "green",
+            _ => "red",
+        },
+        running: w.running(),
+        modified: w.modified,
+        nested: false,
+    }
+}
+
+fn duration(ms: u64) -> String {
+    let secs = ms / 1000;
+    let (h, m) = (secs / 3600, secs / 60 % 60);
+    if h > 0 {
+        crate::trf!("{h}h {m}m", h = h, m = m)
+    } else if m > 0 {
+        crate::trf!("{m}m", m = m)
+    } else {
+        crate::trf!("{s}s", s = secs)
+    }
+}
+
+/// A workflow's agents, phase by phase, in the order they started.
+fn by_phase(w: &Workflow) -> Vec<&Agent> {
+    let mut agents: Vec<&Agent> = w.agents.iter().collect();
+    let rank = |a: &Agent| {
+        a.phase
+            .as_ref()
+            .and_then(|p| w.phases.iter().position(|q| q == p))
+            .unwrap_or(usize::MAX)
+    };
+    agents.sort_by_key(|a| rank(a));
+    agents
 }
 
 fn one_line(text: &str) -> String {
@@ -284,31 +381,68 @@ fn one_line(text: &str) -> String {
     }
 }
 
-/// Running first, then the latest.
-fn items(snapshot: &Snapshot) -> Vec<Item> {
-    let mut items: Vec<Item> = snapshot
+fn is_open(w: &Workflow, toggled: &HashSet<String>) -> bool {
+    w.running() != toggled.contains(&format!("workflow:{}", w.id))
+}
+
+/// Running first, then the latest; an open workflow's agents follow it.
+fn items(snapshot: &Snapshot, toggled: &HashSet<String>) -> Vec<Item> {
+    let mut top: Vec<(Item, Option<&Workflow>)> = snapshot
         .shells
         .iter()
-        .map(shell_item)
-        .chain(snapshot.agents.iter().map(agent_item))
+        .map(|sh| (shell_item(sh), None))
+        .chain(snapshot.agents.iter().map(|a| (agent_item(a), None)))
+        .chain(
+            snapshot
+                .workflows
+                .iter()
+                .map(|w| (workflow_item(w, is_open(w, toggled)), Some(w))),
+        )
         .collect();
-    items.sort_by(|a, b| {
+    top.sort_by(|(a, _), (b, _)| {
         b.running
             .cmp(&a.running)
             .then(b.modified.total_cmp(&a.modified))
     });
+    let mut items = Vec::new();
+    for (item, workflow) in top {
+        items.push(item);
+        if let Some(w) = workflow.filter(|w| is_open(w, toggled)) {
+            items.extend(by_phase(w).into_iter().map(|a| Item {
+                nested: true,
+                ..agent_item(a)
+            }));
+        }
+    }
     items
 }
 
+/// Every key that can be chosen, hidden agents of closed workflows too.
+fn known(snapshot: &Snapshot, key: &str) -> bool {
+    match key.split_once(':') {
+        Some(("agent", id)) => snapshot.agent(id).is_some(),
+        Some(("shell", id)) => snapshot.shells.iter().any(|s| s.id == id),
+        Some(("workflow", id)) => snapshot.workflows.iter().any(|w| w.id == id),
+        _ => false,
+    }
+}
+
 fn render(app: &Rc<App>) {
-    let items = with(|s| items(&s.snapshot)).unwrap_or_default();
+    let items = with(|s| items(&s.snapshot, &s.toggled)).unwrap_or_default();
     with(|s| {
         // Follow the newest running item until one is picked; a picked
         // one that's gone falls back too.
-        let present = |k: &String| items.iter().any(|i| &i.key == k);
-        if !s.picked || (!items.is_empty() && !s.chosen.as_ref().is_some_and(present)) {
+        let present = s.chosen.as_ref().is_some_and(|k| known(&s.snapshot, k));
+        if !s.picked || (!items.is_empty() && !present) {
             s.chosen = items.first().map(|i| i.key.clone());
             s.picked = false;
+        }
+        // A workflow's summary is drawn again with each change.
+        if s.chosen
+            .as_ref()
+            .is_some_and(|k| k.starts_with("workflow:"))
+        {
+            s.detail = None;
         }
         while let Some(row) = s.list.row_at_index(0) {
             s.list.remove(&row);
@@ -319,6 +453,9 @@ fn render(app: &Rc<App>) {
             let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
             hbox.set_margin_top(3);
             hbox.set_margin_bottom(3);
+            if item.nested {
+                hbox.set_margin_start(18);
+            }
             let dot = crate::ui::sidebar::dot();
             crate::ui::sidebar::set_dot(&dot, Some(item.color));
             dot.set_valign(gtk::Align::Center);
@@ -344,7 +481,7 @@ fn render(app: &Rc<App>) {
         if items.is_empty() {
             if s.status.text().is_empty() || s.snapshot == Snapshot::default() {
                 s.status.set_text(tr(
-                    "Nothing in the background. Subagents and shell commands this session starts in the background show up here, live.",
+                    "Nothing in the background. Subagents, workflows and shell commands this session starts in the background show up here, live.",
                 ));
             }
             s.status.set_visible(true);
@@ -369,8 +506,13 @@ fn show_detail(app: &Rc<App>) {
         clear_detail(s);
         s.detail = chosen.clone();
         let Some(key) = &chosen else { return };
-        if let Some(id) = key.strip_prefix("agent:") {
-            if let Some(agent) = s.snapshot.agents.iter().find(|a| a.id == id) {
+        if let Some(id) = key.strip_prefix("workflow:") {
+            if let Some(w) = s.snapshot.workflows.iter().find(|w| w.id == id) {
+                s.title.set_text(&w.name);
+                s.holder.append(&workflow_view(w));
+            }
+        } else if let Some(id) = key.strip_prefix("agent:") {
+            if let Some(agent) = s.snapshot.agent(id) {
                 s.title.set_text(&agent_item(agent).title);
                 let mut tail = JsonlTail::new(host.clone(), agent.path.clone());
                 s.holder
@@ -386,6 +528,97 @@ fn show_detail(app: &Rc<App>) {
             }
         }
     });
+}
+
+/// A workflow at a glance: its phases and how far each got.
+fn workflow_view(w: &Workflow) -> gtk::Widget {
+    let text = |content: &str, class: Option<&str>| {
+        let label = gtk::Label::new(Some(content));
+        label.set_xalign(0.0);
+        label.set_wrap(true);
+        label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+        label.set_selectable(true);
+        if let Some(class) = class {
+            label.add_css_class(class);
+        }
+        label
+    };
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    body.set_margin_start(12);
+    body.set_margin_end(12);
+    body.set_margin_top(4);
+    body.set_margin_bottom(12);
+    if !w.summary.is_empty() {
+        body.append(&text(&w.summary, None));
+    }
+    let mut facts = vec![state_name(&w.status).to_string()];
+    if let Some(ms) = w.duration_ms {
+        facts.push(duration(ms));
+    }
+    if let Some(n) = w.tokens {
+        facts.push(crate::trf!("{n} tokens", n = n));
+    }
+    if let Some(n) = w.tool_calls {
+        facts.push(crate::trf!("{n} tool calls", n = n));
+    }
+    body.append(&text(&facts.join(" · "), Some("dim-label")));
+    if let Some(error) = &w.error {
+        body.append(&text(error, Some("error")));
+    }
+    let mut phases = w.phases.clone();
+    for a in &w.agents {
+        let phase = a.phase.clone().unwrap_or_default();
+        if !phases.contains(&phase) {
+            phases.push(phase);
+        }
+    }
+    for phase in &phases {
+        let agents: Vec<&Agent> = w
+            .agents
+            .iter()
+            .filter(|a| a.phase.as_deref().unwrap_or_default() == phase)
+            .collect();
+        let done = agents.iter().filter(|a| a.finished).count();
+        let mark = if agents.is_empty() {
+            "○"
+        } else if done == agents.len() {
+            "✓"
+        } else {
+            "●"
+        };
+        let name = if phase.is_empty() {
+            tr("Agents")
+        } else {
+            phase
+        };
+        let line = text(
+            &format!("{mark} {name}  {done}/{}", agents.len()),
+            Some("heading"),
+        );
+        line.set_margin_top(6);
+        body.append(&line);
+        for a in agents {
+            let state = if a.finished {
+                tr("Done").to_string()
+            } else {
+                a.activity
+                    .clone()
+                    .unwrap_or_else(|| tr("starting").to_string())
+            };
+            let title = if a.description.is_empty() {
+                &a.kind
+            } else {
+                &a.description
+            };
+            body.append(&text(&format!("   {title} · {state}"), Some("omux-status")));
+        }
+    }
+    gtk::ScrolledWindow::builder()
+        .child(&body)
+        .vexpand(true)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .build()
+        .upcast()
 }
 
 fn clear_detail(s: &mut State) {
@@ -419,8 +652,10 @@ fn output_view(host: Option<String>, path: String) -> gtk::Widget {
         let Some(scroller) = alive.upgrade() else {
             return glib::ControlFlow::Break;
         };
-        if busy.replace(true) || !scroller.is_mapped() && *offset.lock().unwrap() > 0 {
-            busy.set(false);
+        if !scroller.is_mapped() && *offset.lock().unwrap() > 0 {
+            return glib::ControlFlow::Continue;
+        }
+        if busy.replace(true) {
             return glib::ControlFlow::Continue;
         }
         let (host, path, offset) = (host.clone(), path.clone(), offset.clone());

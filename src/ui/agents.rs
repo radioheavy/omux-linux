@@ -404,21 +404,19 @@ pub fn transcript_view_from(
     let entries: Rc<RefCell<Vec<Entry>>> = Rc::default();
     let tools: Rc<RefCell<HashMap<String, usize>>> = Rc::default();
     let loading = Rc::new(Cell::new(false));
+    // Holds the view weakly: a view taken off the screen stops reading.
     let load = {
-        let list = list.clone();
-        let scroller = scroller.clone();
+        let list = list.downgrade();
+        let scroller = scroller.downgrade();
         move || {
+            let (Some(list), Some(scroller)) = (list.upgrade(), scroller.upgrade()) else {
+                return;
+            };
             if loading.replace(true) {
                 return;
             }
             let reader = reader.clone();
-            let (list, scroller, entries, tools, loading) = (
-                list.clone(),
-                scroller.clone(),
-                entries.clone(),
-                tools.clone(),
-                loading.clone(),
-            );
+            let (entries, tools, loading) = (entries.clone(), tools.clone(), loading.clone());
             crate::ui::panel::background(
                 move || reader.lock().map(|mut read| read()).unwrap_or_default(),
                 move |objects| {
@@ -476,10 +474,12 @@ pub fn transcript_view_from(
     load();
     let alive = scroller.downgrade();
     glib::timeout_add_local(Duration::from_millis(1500), move || {
-        if alive.upgrade().is_none() {
+        let Some(scroller) = alive.upgrade() else {
             return glib::ControlFlow::Break;
+        };
+        if scroller.is_mapped() {
+            load();
         }
-        load();
         glib::ControlFlow::Continue
     });
     scroller.upcast()
